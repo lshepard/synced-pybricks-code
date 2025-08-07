@@ -9,5 +9,5 @@ import { Hub } from '.';
  * @returns Tuple of the current state and setter (like useState()).
  */
 export function useHubPickerSelectedHub() {
-    return useLocalStorage('hubPicker.selectedHub', Hub.Move);
+    return useLocalStorage('hubPicker.selectedHub', Hub.Prime);
 }
