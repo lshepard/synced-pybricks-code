@@ -13,6 +13,7 @@ import { createLogger } from 'redux-logger';
 import createSagaMiddleware from 'redux-saga';
 import App from './app/App';
 import { appVersion } from './app/constants';
+import AuthWrapper from './auth/AuthWrapper';
 import { db } from './fileStorage/context';
 import { i18nManager } from './i18n';
 import { rootReducer } from './reducers';
@@ -82,7 +83,9 @@ root.render(
         <I18nContext.Provider value={i18nManager}>
             <OverlayProvider>
                 <HotkeysProvider>
-                    <App />
+                    <AuthWrapper>
+                        <App />
+                    </AuthWrapper>
                 </HotkeysProvider>
             </OverlayProvider>
             <OverlayToaster ref={toasterRef} />

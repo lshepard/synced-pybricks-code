@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2023 The Pybricks Authors
+
+.pb-login-page {
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--pb-color-bg-secondary);
+}
+
+.pb-login-container {
+    width: 100%;
+    max-width: 400px;
+    padding: 20px;
+}
+
+.pb-login-card {
+    padding: 32px;
+}
+
+.pb-login-header {
+    text-align: center;
+    margin-bottom: 32px;
+    
+    h1 {
+        margin: 0 0 8px 0;
+        color: var(--pb-color-text-primary);
+    }
+    
+    p {
+        margin: 0;
+        color: var(--pb-color-text-secondary);
+    }
+}
+
+.pb-login-error {
+    margin-bottom: 16px;
+}
+
+.pb-login-button {
+    margin-top: 16px;
+}
+
+.pb-auth-loading {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--pb-color-bg-secondary);
+    gap: 16px;
+    
+    p {
+        color: var(--pb-color-text-secondary);
+        margin: 0;
+    }
+}
