@@ -25,3 +25,18 @@ export type ProjectWithMembers = Project & {
         joined_at: string;
     }>;
 };
+
+export type User = {
+    id: string;
+    email: string;
+    user_metadata?: {
+        role?: 'admin' | 'student';
+    };
+    created_at: string;
+};
+
+export type CreateUserRequest = {
+    email: string;
+    password: string;
+    role: 'admin' | 'student';
+};

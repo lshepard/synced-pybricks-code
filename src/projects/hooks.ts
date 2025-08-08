@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/hooks';
 import { supabase } from '../auth/supabase';
-import { Project, ProjectWithMembers } from './types';
+import { CreateUserRequest, Project, ProjectWithMembers, User } from './types';
 
 /**
  * Hook to get projects for the current user
@@ -108,4 +108,210 @@ export function useCreateProject() {
     };
 
     return { createProject, loading, error };
+}
+
+/**
+ * Hook to get all users (admin only)
+ */
+export function useUsers() {
+    const [users, setUsers] = useState<User[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const { user, isAdmin } = useAuth();
+
+    useEffect(() => {
+        if (!user || !isAdmin) {
+            setUsers([]);
+            setLoading(false);
+            return;
+        }
+
+        const fetchUsers = async () => {
+            try {
+                // Use Supabase Admin API to get users
+                const { data, error } = await supabase.auth.admin.listUsers();
+
+                if (error) {
+                    setError(error.message);
+                    return;
+                }
+
+                const transformedUsers: User[] = data.users.map((authUser) => ({
+                    id: authUser.id,
+                    email: authUser.email || '',
+                    user_metadata: authUser.user_metadata as {
+                        role?: 'admin' | 'student';
+                    },
+                    created_at: authUser.created_at,
+                }));
+
+                setUsers(transformedUsers);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to fetch users');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchUsers();
+    }, [user, isAdmin]);
+
+    return { users, loading, error, refetch: () => setLoading(true) };
+}
+
+/**
+ * Hook to create a new user (admin only)
+ */
+export function useCreateUser() {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { isAdmin } = useAuth();
+
+    const createUser = async (userData: CreateUserRequest) => {
+        if (!isAdmin) {
+            setError('Not authorized');
+            return null;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            const { data, error } = await supabase.auth.admin.createUser({
+                email: userData.email,
+                password: userData.password,
+                user_metadata: {
+                    role: userData.role,
+                },
+                email_confirm: true, // Skip email confirmation
+            });
+
+            if (error) {
+                setError(error.message);
+                return null;
+            }
+
+            return data.user;
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to create user');
+            return null;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return { createUser, loading, error };
+}
+
+/**
+ * Hook to delete a user (admin only)
+ */
+export function useDeleteUser() {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { isAdmin } = useAuth();
+
+    const deleteUser = async (userId: string) => {
+        if (!isAdmin) {
+            setError('Not authorized');
+            return false;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            const { error } = await supabase.auth.admin.deleteUser(userId);
+
+            if (error) {
+                setError(error.message);
+                return false;
+            }
+
+            return true;
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Failed to delete user');
+            return false;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return { deleteUser, loading, error };
+}
+
+/**
+ * Hook to manage project memberships
+ */
+export function useProjectMemberships() {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const { isAdmin } = useAuth();
+
+    const addUserToProject = async (userId: string, projectId: string) => {
+        if (!isAdmin) {
+            setError('Not authorized');
+            return false;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            const { error } = await supabase.from('project_memberships').insert({
+                user_id: userId,
+                project_id: projectId,
+            });
+
+            if (error) {
+                setError(error.message);
+                return false;
+            }
+
+            return true;
+        } catch (err) {
+            setError(
+                err instanceof Error ? err.message : 'Failed to add user to project',
+            );
+            return false;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const removeUserFromProject = async (userId: string, projectId: string) => {
+        if (!isAdmin) {
+            setError('Not authorized');
+            return false;
+        }
+
+        setLoading(true);
+        setError(null);
+
+        try {
+            const { error } = await supabase
+                .from('project_memberships')
+                .delete()
+                .eq('user_id', userId)
+                .eq('project_id', projectId);
+
+            if (error) {
+                setError(error.message);
+                return false;
+            }
+
+            return true;
+        } catch (err) {
+            setError(
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to remove user from project',
+            );
+            return false;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return { addUserToProject, removeUserFromProject, loading, error };
 }

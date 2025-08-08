@@ -15,6 +15,8 @@ import {
 } from '@blueprintjs/core';
 import { Cross, Plus } from '@blueprintjs/icons';
 import React, { useState } from 'react';
+import ProjectMemberships from './ProjectMemberships';
+import UserManagement from './UserManagement';
 import { useCreateProject } from './hooks';
 
 type AdminPanelProps = {
@@ -64,7 +66,8 @@ const AdminPanel: React.FunctionComponent<AdminPanelProps> = ({
 
             <Tabs selectedTabId={activeTab} onChange={setActiveTab}>
                 <Tab id="create-project" title="Create Project" />
-                <Tab id="manage-users" title="Manage Users" disabled />
+                <Tab id="manage-users" title="Manage Users" />
+                <Tab id="manage-memberships" title="Project Memberships" />
             </Tabs>
 
             <div className="pb-admin-panel-content">
@@ -125,12 +128,9 @@ const AdminPanel: React.FunctionComponent<AdminPanelProps> = ({
                     </form>
                 )}
 
-                {activeTab === 'manage-users' && (
-                    <Callout intent={Intent.PRIMARY}>
-                        <h4>Coming Soon</h4>
-                        <p>User management features will be added in the next phase.</p>
-                    </Callout>
-                )}
+                {activeTab === 'manage-users' && <UserManagement />}
+
+                {activeTab === 'manage-memberships' && <ProjectMemberships />}
             </div>
         </div>
     );
