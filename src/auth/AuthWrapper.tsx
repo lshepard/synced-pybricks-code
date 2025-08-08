@@ -3,6 +3,7 @@
 
 import { Spinner } from '@blueprintjs/core';
 import React from 'react';
+import ProjectSelector from '../projects/ProjectSelector';
 import LoginPage from './LoginPage';
 import { useAuth } from './hooks';
 
@@ -10,7 +11,9 @@ type AuthWrapperProps = {
     children: React.ReactNode;
 };
 
-const AuthWrapper: React.FunctionComponent<AuthWrapperProps> = ({ children }) => {
+const AuthWrapper: React.FunctionComponent<AuthWrapperProps> = ({
+    children: _children,
+}) => {
     const { user, loading } = useAuth();
 
     if (loading) {
@@ -26,7 +29,9 @@ const AuthWrapper: React.FunctionComponent<AuthWrapperProps> = ({ children }) =>
         return <LoginPage />;
     }
 
-    return <>{children}</>;
+    // Show ProjectSelector instead of main app for now
+    // Later we'll add routing to switch between ProjectSelector and project workspace
+    return <ProjectSelector />;
 };
 
 export default AuthWrapper;

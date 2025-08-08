@@ -36,5 +36,8 @@ export function useAuth() {
         await supabase.auth.signOut();
     };
 
-    return { user, loading, signOut };
+    const userRole = user?.user_metadata?.role || 'student';
+    const isAdmin = userRole === 'admin';
+
+    return { user, loading, signOut, userRole, isAdmin };
 }

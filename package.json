@@ -135,7 +135,12 @@
         "test": "node scripts/test.js",
         "coverage": "yarn test --coverage --watchAll=false",
         "coverage:html": "yarn coverage --coverageReporters html",
-        "lint": "tsc --noEmit && eslint \"*/**/*.{js,ts,tsx}\" --quiet --fix"
+        "lint": "tsc --noEmit && eslint \"*/**/*.{js,ts,tsx}\" --quiet --fix",
+        "db:push": "npx supabase@latest db push",
+        "db:reset": "npx supabase@latest db reset",
+        "db:migration": "npx supabase@latest migration new",
+        "db:status": "npx supabase@latest status",
+        "supabase": "npx supabase@latest"
     },
     "eslintConfig": {
         "extends": "react-app"
@@ -165,7 +170,8 @@
         "eslint-plugin-react": "^7.33.2",
         "eslint-plugin-total-functions": "^6.10.5",
         "eslint-webpack-plugin": "^4.0.1",
-        "prettier": "^3.1.1"
+        "prettier": "^3.1.1",
+        "supabase": "^2.33.9"
     },
     "packageManager": "yarn@3.3.0",
     "resolutions": {
