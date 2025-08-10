@@ -1,0 +1,16 @@
+[phases.setup]
+nixPkgs = ["nodejs-18_x", "yarn", "python3"]
+
+[phases.install]
+cmds = [
+    "yarn install --frozen-lockfile",
+    "npx update-browserslist-db@latest"
+]
+
+[phases.build]
+cmds = [
+    "CI=false DISABLE_BROWSERSLIST_UPDATE_CHECK=true NODE_OPTIONS='--max_old_space_size=4096' yarn build"
+]
+
+[start]
+cmd = "python3 -m http.server 8080 -d build"
