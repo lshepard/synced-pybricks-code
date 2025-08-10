@@ -1,16 +1,7 @@
 [build]
-builder = "nixpacks"
-
-[build.env]
-# Don't treat warnings as errors in Railway builds
-CI = "false"
-# Skip unnecessary browserslist update warnings
-DISABLE_BROWSERSLIST_UPDATE_CHECK = "true"
-# Ensure we have enough memory for the build
-NODE_OPTIONS = "--max_old_space_size=4096"
+builder = "dockerfile"
 
 [deploy]
-startCommand = "yarn build && python3 -m http.server 8080 -d build"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
