@@ -132,3 +132,30 @@ export const editorReplaceFile = createAction((uuid: UUID, value: string) => ({
     uuid,
     value,
 }));
+
+/**
+ * Sets a file as read-only due to being locked by another user.
+ * @param uuid The file UUID.
+ */
+export const editorSetFileReadOnly = createAction((uuid: UUID) => ({
+    type: 'editor.action.setFileReadOnly',
+    uuid,
+}));
+
+/**
+ * Sets a file as editable (no longer read-only).
+ * @param uuid The file UUID.
+ */
+export const editorSetFileEditable = createAction((uuid: UUID) => ({
+    type: 'editor.action.setFileEditable',
+    uuid,
+}));
+
+/**
+ * Reverts files to read-only when they lose their editing locks.
+ * @param uuids Array of file UUIDs that lost their locks.
+ */
+export const editorRevokeEditingLocks = createAction((uuids: UUID[]) => ({
+    type: 'editor.action.revokeEditingLocks',
+    uuids,
+}));

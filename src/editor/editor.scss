@@ -47,6 +47,16 @@
             justify-content: flex-end;
             align-items: center;
 
+            // Editable file tabs (green)
+            &.pb-editor-tab-editable .#{bp.$ns}-text {
+                color: #0d8043; // Green for editable files
+            }
+
+            // Read-only file tabs (orange)  
+            &.pb-editor-tab-readonly .#{bp.$ns}-text {
+                color: #bf7326; // Orange for read-only files
+            }
+
             .#{bp.$ns}-dark & {
                 border-right-color: bp.$pt-dark-divider-white;
             }

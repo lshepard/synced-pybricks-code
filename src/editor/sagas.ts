@@ -163,18 +163,33 @@ function* handleEditorOpenFile(
 
             defined(didLoad);
 
-            const model = monaco.editor.createModel(
-                didLoad.value,
-                pybricksMicroPythonId,
-                modelUri,
-            );
-            defer.push(() => model.dispose());
+            // Check if a model already exists for this URI
+            let model = monaco.editor.getModel(modelUri);
+            let shouldDisposeModel = false;
+
+            if (!model) {
+                // Create new model if it doesn't exist
+                model = monaco.editor.createModel(
+                    didLoad.value,
+                    pybricksMicroPythonId,
+                    modelUri,
+                );
+                shouldDisposeModel = true;
+            } else {
+                // Update existing model with latest content
+                model.setValue(didLoad.value);
+            }
+
+            // Only dispose model if we created it in this session
+            if (shouldDisposeModel) {
+                defer.push(() => model!.dispose());
+            }
 
             // NB: the throttle effect doesn't work with event channels, so we
             // emulate the effect by using a buffer with size of one here...
             const didChangeModelChan =
                 eventChannel<monaco.editor.IModelContentChangedEvent>((emit) => {
-                    const subscription = model.onDidChangeContent((e) => emit(e));
+                    const subscription = model!.onDidChangeContent((e) => emit(e));
                     return () => subscription.dispose();
                 }, buffers.sliding(1));
 
@@ -182,7 +197,7 @@ function* handleEditorOpenFile(
 
             // ... and then fork to function that looks like
             // https://github.com/redux-saga/redux-saga/issues/620#issuecomment-259161095
-            yield* fork(handleModelDidChange, 1000, didChangeModelChan, model);
+            yield* fork(handleModelDidChange, 1000, didChangeModelChan, model!);
 
             const replaceFileTask: Task = yield* takeEvery(
                 editorReplaceFile.when((a) => a.uuid === action.uuid),
@@ -505,7 +520,7 @@ function* mirrorFileSystem(worker: Worker): Generator {
 
                 switch (c.type) {
                     case DatabaseChangeTypeCreate:
-                    case DatabaseChangeTypeUpdate:
+                    case DatabaseChangeTypeUpdate: {
                         // only send message if file was created or contents
                         // changed - ignore other metadata changes
                         if (
@@ -515,7 +530,7 @@ function* mirrorFileSystem(worker: Worker): Generator {
                             break;
                         }
 
-                        yield* call(() =>
+                        const fileContents = yield* call(() =>
                             db.transaction('r', db._contents, async () => {
                                 const file = await db._contents.get(c.obj.path);
 
@@ -524,7 +539,7 @@ function* mirrorFileSystem(worker: Worker): Generator {
                                     console.error(
                                         `could not find file '${c.obj.path}'`,
                                     );
-                                    return;
+                                    return null;
                                 }
 
                                 worker.postMessage(
@@ -533,10 +548,36 @@ function* mirrorFileSystem(worker: Worker): Generator {
                                         file.contents,
                                     ),
                                 );
+
+                                return file;
                             }),
                         );
 
+                        // Update Monaco model if file is currently open and read-only
+                        if (fileContents) {
+                            const modelUri = monaco.Uri.from({
+                                scheme: 'pybricksCode',
+                                path: c.obj.uuid,
+                            });
+                            const existingModel = monaco.editor.getModel(modelUri);
+
+                            if (existingModel) {
+                                // Check if this file is read-only by checking Redux state
+                                const state = yield* select();
+                                const readOnlyFiles = state.editor.readOnlyFileUuids;
+
+                                if (readOnlyFiles.includes(c.obj.uuid)) {
+                                    console.log(
+                                        '[Editor Sync] Updating read-only file content:',
+                                        fileContents.path,
+                                    );
+                                    existingModel.setValue(fileContents.contents);
+                                }
+                            }
+                        }
+
                         break;
+                    }
 
                     case DatabaseChangeTypeDelete:
                         worker.postMessage(pythonMessageDeleteUserFile(c.oldObj.path));

@@ -73,6 +73,19 @@ window.addEventListener('drop', dragEventHandler);
 
 sagaMiddleware.run(rootSaga);
 
+// Initialize file editing session cleanup and validation for cross-device coordination
+import('./fileStorage/editingSessions').then(
+    ({ initializePageUnloadCleanup, startEditingSessionValidation }) => {
+        initializePageUnloadCleanup();
+
+        // Start periodic validation of editing sessions
+        startEditingSessionValidation((invalidFiles: string[]) => {
+            console.log('[File Editing] Files lost their locks:', invalidFiles);
+            // TODO: Integrate with Redux to update read-only status
+        });
+    },
+);
+
 const container = document.getElementById('root');
 defined(container);
 const root = createRoot(container);

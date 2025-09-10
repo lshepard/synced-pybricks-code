@@ -9,6 +9,7 @@ import {
     put,
     race,
     select,
+    spawn,
     take,
     takeEvery,
 } from 'typed-redux-saga/macro';
@@ -21,10 +22,11 @@ import {
     editorDidCloseFile,
     editorDidFailToActivateFile,
     editorReplaceFile,
+    editorSetFileReadOnly,
 } from '../editor/actions';
 import { EditorError } from '../editor/error';
 import { getPybricksMicroPythonFileTemplate } from '../editor/pybricksMicroPython';
-import { FileStorageDb } from '../fileStorage';
+import { FileStorageDb, UUID } from '../fileStorage';
 import {
     fileStorageCopyFile,
     fileStorageDeleteFile,
@@ -381,13 +383,115 @@ function* handleExplorerCreateNewFile(): Generator {
 }
 
 /**
+ * Background task to monitor file close and end editing session
+ */
+function* monitorFileClose(
+    uuid: UUID,
+    filePath: string,
+    isReadOnly: boolean,
+): Generator {
+    try {
+        // Listen for file close to end the session
+        yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
+
+        // Only end editing session if we started one (not read-only)
+        if (!isReadOnly) {
+            const { endEditingSession } = yield* call(
+                () => import('../fileStorage/editingSessions'),
+            );
+            yield* call(() => endEditingSession(filePath));
+            console.log('[File Editing] Ended editing session for:', filePath);
+        } else {
+            console.log('[File Editing] Closed read-only file:', filePath);
+        }
+    } catch (error) {
+        console.error('[File Editing] Error ending session:', error);
+    }
+}
+
+/**
+ * Manages file editing session for cross-device coordination
+ * Returns true if the file can be edited, false if blocked
+ */
+function* manageFileEditingSession(
+    uuid: UUID,
+    _fileName: string,
+): Generator<unknown, { canEdit: boolean; readOnly: boolean }, unknown> {
+    try {
+        const db = yield* getContext<FileStorageDb>('fileStorage');
+        const { startEditingSession } = yield* call(
+            () => import('../fileStorage/editingSessions'),
+        );
+
+        // Get file path from metadata
+        const metadata = yield* call(() => db.metadata.get(uuid));
+
+        if (!metadata) {
+            console.warn('[File Editing] No metadata found for UUID:', uuid);
+            return { canEdit: true, readOnly: false }; // Allow editing if we can't find metadata
+        }
+
+        // Try to start editing session
+        const editingResult = yield* call(() => startEditingSession(metadata.path));
+
+        if (!editingResult.success) {
+            console.log(
+                '[File Editing] File locked for editing, opening in read-only mode:',
+                metadata.path,
+            );
+
+            // Start background task to monitor file close (but no editing session to end)
+            yield* spawn(monitorFileClose, uuid, metadata.path, true);
+
+            return { canEdit: true, readOnly: true };
+        }
+
+        console.log('[File Editing] Started editing session for:', metadata.path);
+
+        // Start background task to monitor file close
+        yield* spawn(monitorFileClose, uuid, metadata.path, false);
+
+        return { canEdit: true, readOnly: false };
+    } catch (error) {
+        console.error('[File Editing] Error managing session:', error);
+        return { canEdit: true, readOnly: false }; // Allow editing on error
+    }
+}
+
+/**
  * Connects user triggered action to editor module.
  * @param action
  */
 function* handleExplorerActivateFile(
     action: ReturnType<typeof explorerUserActivateFile>,
 ): Generator {
+    // Check file editing status and manage session
+    const editingStatus = (yield* call(
+        manageFileEditingSession,
+        action.uuid,
+        action.fileName,
+    )) as unknown as { canEdit: boolean; readOnly: boolean };
+
+    if (!editingStatus.canEdit) {
+        return; // Something went wrong
+    }
+
+    // Set read-only status before opening the file
+    if (editingStatus.readOnly) {
+        yield* put(editorSetFileReadOnly(action.uuid));
+    }
+
+    // Open the file
     yield* put(editorActivateFile(action.uuid));
+
+    // Show notification if file is read-only
+    if (editingStatus.readOnly) {
+        yield* put(
+            alertsShowAlert('explorer', 'fileInUse', {
+                fileName: action.fileName,
+            }),
+        );
+    }
 
     const { didFailToActivate } = yield* race({
         didActivate: take(editorDidActivateFile.when((a) => a.uuid === action.uuid)),

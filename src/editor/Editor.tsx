@@ -252,6 +252,7 @@ type EditorTabsProps = Readonly<{
 const EditorTabs: React.FunctionComponent<EditorTabsProps> = ({ onChange }) => {
     const openFiles = useSelector((s) => s.editor.openFileUuids);
     const activeFile = useSelector((s) => s.editor.activeFileUuid);
+    const readOnlyFiles = useSelector((s) => s.editor.readOnlyFileUuids);
     const dispatch = useDispatch();
 
     const handleChange = useCallback(
@@ -318,23 +319,31 @@ const EditorTabs: React.FunctionComponent<EditorTabsProps> = ({ onChange }) => {
             ref={tabsRef}
             onChange={handleChange}
         >
-            {openFiles.map((uuid) => (
-                <Tab
-                    className="pb-editor-tablist-tab"
-                    aria-labelledby={`${labelId}.${uuid}`}
-                    key={uuid}
-                    id={uuid}
-                    onKeyDown={(e) => handleKeyDown(e, uuid)}
-                    onMouseUp={(e) => handleMouseUp(e, uuid)}
-                >
-                    <TabLabel
-                        id={`${labelId}.${uuid}`}
-                        uuid={uuid}
-                        onNameChanged={handleNameChanged}
-                    />
-                    <TabCloseButton uuid={uuid} />
-                </Tab>
-            ))}
+            {openFiles.map((uuid) => {
+                const isReadOnly = readOnlyFiles.includes(uuid);
+                const tabClassName = classNames(
+                    'pb-editor-tablist-tab',
+                    isReadOnly ? 'pb-editor-tab-readonly' : 'pb-editor-tab-editable',
+                );
+
+                return (
+                    <Tab
+                        className={tabClassName}
+                        aria-labelledby={`${labelId}.${uuid}`}
+                        key={uuid}
+                        id={uuid}
+                        onKeyDown={(e) => handleKeyDown(e, uuid)}
+                        onMouseUp={(e) => handleMouseUp(e, uuid)}
+                    >
+                        <TabLabel
+                            id={`${labelId}.${uuid}`}
+                            uuid={uuid}
+                            onNameChanged={handleNameChanged}
+                        />
+                        <TabCloseButton uuid={uuid} />
+                    </Tab>
+                );
+            })}
         </Tabs>
     );
 };
@@ -393,9 +402,29 @@ const Editor: React.FunctionComponent = () => {
 
     const i18n = useI18n();
 
+    // Get read-only status for the currently active file
+    const currentActiveFile = useSelector((s) => s.editor.activeFileUuid);
+    const readOnlyFiles = useSelector((s) => s.editor.readOnlyFileUuids);
+    const isActiveFileReadOnly = currentActiveFile
+        ? readOnlyFiles.includes(currentActiveFile)
+        : false;
+
     useEffect(() => {
         monaco.editor.setTheme(isDarkMode ? tomorrowNightEightiesId : xcodeId);
     }, [isDarkMode]);
+
+    // Update Monaco editor read-only state based on active file
+    useEffect(() => {
+        if (editor) {
+            editor.updateOptions({ readOnly: isActiveFileReadOnly });
+            console.log(
+                '[Editor] Set read-only mode:',
+                isActiveFileReadOnly,
+                'for file:',
+                currentActiveFile,
+            );
+        }
+    }, [editor, isActiveFileReadOnly, currentActiveFile]);
 
     useEditor(
         editor,

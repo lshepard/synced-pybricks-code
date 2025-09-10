@@ -81,6 +81,8 @@ export function timestamp(): string {
  * in code where using it natively doesn't work well (e.g. in sagas). Care must
  * be taken so that all code paths (including exceptions) release the lock.
  *
+ * Now includes remote locking coordination via Supabase for cross-device sync.
+ *
  * To release the lock, await the returned release function. When the release
  * function resolves, the lock will no longer be held.
  *
@@ -94,39 +96,34 @@ export async function acquireLock(
     name: string,
     shared?: boolean,
 ): Promise<(() => Promise<void>) | void> {
-    let lockWaiter: Promise<void>;
+    // All locks are now remote-only for consistency
+    console.log('[Remote Lock] Attempting to acquire lock:', name, 'shared:', !!shared);
 
-    const release = await new Promise<(() => void) | void>((resolve, reject) => {
-        lockWaiter = navigator.locks
-            .request(
-                name,
-                {
-                    ifAvailable: true,
-                    mode: shared ? 'shared' : 'exclusive',
-                },
-                (lock) => {
-                    // if the locks is already held, lock will be null here
-                    if (lock === null) {
-                        resolve();
-                        return;
-                    }
+    // Only do remote locking for exclusive locks (writes)
+    if (!shared) {
+        const { acquireRemoteLock } = await import('../fileStorage/remoteLocks');
+        const gotRemoteLock = await acquireRemoteLock(name);
 
-                    // Now we own the lock and it will be held until the returned
-                    // promise is resolved.
-                    return new Promise<void>((resolve2) => resolve(resolve2));
-                },
-            )
-            .catch(reject);
-    });
+        if (!gotRemoteLock) {
+            console.log('[Remote Lock] Failed to acquire lock:', name);
+            return; // Lock failed
+        }
 
-    if (!release) {
-        return;
+        console.log('[Remote Lock] Acquired lock:', name);
+
+        // Return release function for remote lock
+        return async () => {
+            console.log('[Remote Lock] Releasing lock:', name);
+            const { releaseRemoteLock } = await import('../fileStorage/remoteLocks');
+            await releaseRemoteLock(name);
+            console.log('[Remote Lock] Released lock:', name);
+        };
     }
 
+    // For shared locks, we still allow them locally since they don't conflict
+    // (multiple readers are fine, it's the writers we need to coordinate)
+    console.log('[Remote Lock] Shared lock - allowing local only:', name);
     return async () => {
-        // trigger the release
-        release();
-        // then wait until the release is complete and the lock is no longer held
-        await lockWaiter;
+        console.log('[Remote Lock] Released shared lock:', name);
     };
 }

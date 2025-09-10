@@ -85,6 +85,8 @@ function* handleOpen(
     openFds: OpenFdMap,
     action: ReturnType<typeof fileStorageOpen>,
 ): Generator {
+    console.log('handleOpen', action.path, action.mode);
+
     try {
         const fd = nextFd();
 

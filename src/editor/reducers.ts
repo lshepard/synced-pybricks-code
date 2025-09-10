@@ -8,6 +8,9 @@ import {
     editorDidCloseFile,
     editorDidCreate,
     editorDidOpenFile,
+    editorRevokeEditingLocks,
+    editorSetFileEditable,
+    editorSetFileReadOnly,
 } from './actions';
 import codeCompletion from './redux/codeCompletion';
 
@@ -46,9 +49,39 @@ const openFileUuids: Reducer<readonly UUID[]> = (state = [], action) => {
     return state;
 };
 
+/** A set of file UUIDs that are currently read-only due to being locked by other users. */
+const readOnlyFileUuids: Reducer<readonly UUID[]> = (state = [], action) => {
+    if (editorSetFileReadOnly.matches(action)) {
+        // Add to read-only list if not already there
+        if (!state.includes(action.uuid)) {
+            return [...state, action.uuid];
+        }
+        return state;
+    }
+
+    if (editorSetFileEditable.matches(action)) {
+        // Remove from read-only list
+        return state.filter((uuid) => uuid !== action.uuid);
+    }
+
+    if (editorDidCloseFile.matches(action)) {
+        // Clean up read-only status when file is closed
+        return state.filter((uuid) => uuid !== action.uuid);
+    }
+
+    if (editorRevokeEditingLocks.matches(action)) {
+        // Add files that lost their locks to read-only list
+        const newReadOnlyFiles = action.uuids.filter((uuid) => !state.includes(uuid));
+        return [...state, ...newReadOnlyFiles];
+    }
+
+    return state;
+};
+
 export default combineReducers({
     codeCompletion,
     isReady,
     activeFileUuid,
     openFileUuids,
+    readOnlyFileUuids,
 });
