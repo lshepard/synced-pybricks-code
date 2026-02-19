@@ -613,7 +613,7 @@ describe('handleExplorerCreateNewFile', () => {
     });
 
     it('should dispatch fileStorage action', async () => {
-        saga.put(newFileWizardDidAccept('test', pythonFileExtension, Hub.Technic));
+        saga.put(newFileWizardDidAccept('test', pythonFileExtension, Hub.Technic, 'python'));
 
         await expect(saga.take()).resolves.toMatchInlineSnapshot(`
             {

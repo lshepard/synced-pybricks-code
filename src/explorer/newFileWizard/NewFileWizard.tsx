@@ -7,6 +7,8 @@ import {
     ControlGroup,
     Dialog,
     FormGroup,
+    Radio,
+    RadioGroup,
     Switch,
     Text,
 } from '@blueprintjs/core';
@@ -25,7 +27,11 @@ import {
 } from '../../pybricksMicropython/lib';
 import { useSelector } from '../../reducers';
 import FileNameFormGroup from '../fileNameFormGroup/FileNameFormGroup';
-import { newFileWizardDidAccept, newFileWizardDidCancel } from './actions';
+import {
+    ProgramType,
+    newFileWizardDidAccept,
+    newFileWizardDidCancel,
+} from './actions';
 import { useI18n } from './i18n';
 
 const NewFileWizard: React.FunctionComponent = () => {
@@ -35,6 +41,10 @@ const NewFileWizard: React.FunctionComponent = () => {
     const [useTemplate, setUseTemplate] = useLocalStorage(
         'explorer.newFileWizard.useTemplate',
         true,
+    );
+    const [programType, setProgramType] = useLocalStorage<ProgramType>(
+        'explorer.newFileWizard.programType',
+        'python',
     );
     const isOpen = useSelector((s) => s.explorer.newFileWizard.isOpen);
     const [fileName, setFileName] = useState('');
@@ -55,11 +65,12 @@ const NewFileWizard: React.FunctionComponent = () => {
                 newFileWizardDidAccept(
                     fileName,
                     pythonFileExtension,
-                    useTemplate ? hubType : undefined,
+                    programType === 'python' && useTemplate ? hubType : undefined,
+                    programType,
                 ),
             );
         },
-        [dispatch, fileName, hubType, useTemplate],
+        [dispatch, fileName, hubType, programType, useTemplate],
     );
 
     const handleClose = useCallback(() => {
@@ -86,29 +97,49 @@ const NewFileWizard: React.FunctionComponent = () => {
                         inputRef={fileNameInputRef}
                         onChange={setFileName}
                     />
-                    <FormGroup label={i18n.translate('template.label')}>
-                        <ControlGroup vertical>
-                            <Switch
-                                checked={useTemplate}
-                                onChange={(e) =>
-                                    setUseTemplate(
-                                        (e.target as HTMLInputElement).checked,
-                                    )
-                                }
-                            >
-                                {i18n.translate('useTemplate.label')}
-                            </Switch>
-                            <Text className={Classes.TEXT_MUTED}>
-                                {useTemplate
-                                    ? i18n.translate('useTemplate.description.checked')
-                                    : i18n.translate(
-                                          'useTemplate.description.unchecked',
-                                      )}
-                            </Text>
-                        </ControlGroup>
-                        <div className="pb-spacer" />
-                        <HubPicker disabled={!useTemplate} />
+                    <FormGroup label="Program type">
+                        <RadioGroup
+                            selectedValue={programType}
+                            onChange={(e) =>
+                                setProgramType(
+                                    (e.target as HTMLInputElement)
+                                        .value as ProgramType,
+                                )
+                            }
+                            inline
+                        >
+                            <Radio label="Python" value="python" />
+                            <Radio label="Blocks" value="blocks" />
+                        </RadioGroup>
                     </FormGroup>
+                    {programType === 'python' && (
+                        <FormGroup label={i18n.translate('template.label')}>
+                            <ControlGroup vertical>
+                                <Switch
+                                    checked={useTemplate}
+                                    onChange={(e) =>
+                                        setUseTemplate(
+                                            (e.target as HTMLInputElement)
+                                                .checked,
+                                        )
+                                    }
+                                >
+                                    {i18n.translate('useTemplate.label')}
+                                </Switch>
+                                <Text className={Classes.TEXT_MUTED}>
+                                    {useTemplate
+                                        ? i18n.translate(
+                                              'useTemplate.description.checked',
+                                          )
+                                        : i18n.translate(
+                                              'useTemplate.description.unchecked',
+                                          )}
+                                </Text>
+                            </ControlGroup>
+                            <div className="pb-spacer" />
+                            <HubPicker disabled={!useTemplate} />
+                        </FormGroup>
+                    )}
                 </div>
                 <div className={Classes.DIALOG_FOOTER}>
                     <div className={Classes.DIALOG_FOOTER_ACTIONS}>

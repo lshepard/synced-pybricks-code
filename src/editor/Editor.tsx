@@ -40,11 +40,14 @@ import { useSelector } from '../reducers';
 import { useSettingIsShowDocsEnabled } from '../settings/hooks';
 import { isMacOS } from '../utils/os';
 import Welcome from './Welcome';
-import { editorActivateFile, editorCloseFile } from './actions';
+import { editorActivateFile, editorCloseFile, editorReplaceFile } from './actions';
+import { decodeBlocksFile, isBlocksFile } from './blockly/serialization';
 import { useI18n } from './i18n';
 import * as pybricksMicroPython from './pybricksMicroPython';
 import { pybricksMicroPythonId } from './pybricksMicroPython';
 import { UntitledHintContribution } from './untitledHint';
+
+const BlocksEditor = React.lazy(() => import('./blockly/BlocksEditor'));
 
 monaco.languages.register({ id: pybricksMicroPythonId });
 
@@ -503,6 +506,51 @@ const Editor: React.FunctionComponent = () => {
     const { activeFileUuid } = useSelector((s) => s.editor);
     const fileName = useFileStoragePath(activeFileUuid ?? ('' as UUID));
 
+    // Detect whether the active file is a blocks file by checking the
+    // Monaco model content.
+    const [activeBlocksState, setActiveBlocksState] = useState<{
+        uuid: UUID;
+        workspaceJson: object | undefined;
+    } | null>(null);
+
+    useEffect(() => {
+        if (!editor || !activeFileUuid) {
+            setActiveBlocksState(null);
+            return;
+        }
+
+        const model = editor.getModel();
+        if (!model) {
+            setActiveBlocksState(null);
+            return;
+        }
+
+        const content = model.getValue();
+        if (isBlocksFile(content)) {
+            const decoded = decodeBlocksFile(content);
+            setActiveBlocksState({
+                uuid: activeFileUuid,
+                workspaceJson: decoded?.workspaceJson ?? undefined,
+            });
+        } else {
+            setActiveBlocksState(null);
+        }
+    }, [editor, activeFileUuid]);
+
+    const isBlocksActive =
+        activeBlocksState !== null && activeBlocksState.uuid === activeFileUuid;
+
+    const handleBlocksContentChange = useCallback(
+        (content: string) => {
+            if (activeFileUuid) {
+                // Update the Monaco model to keep it in sync with blocks editor.
+                // This triggers the normal save-to-storage flow in the saga.
+                dispatch(editorReplaceFile(activeFileUuid, content));
+            }
+        },
+        [activeFileUuid, dispatch],
+    );
+
     return (
         <div className="pb-editor">
             <EditorTabs onChange={() => editor?.focus()} />
@@ -518,7 +566,22 @@ const Editor: React.FunctionComponent = () => {
                     popoverProps={popoverProps}
                 >
                     <Welcome isVisible={isEmpty} />
-                    <div className="pb-editor-monaco" ref={editorRef} />
+                    {isBlocksActive && (
+                        <React.Suspense fallback={<div />}>
+                            <BlocksEditor
+                                key={activeBlocksState.uuid}
+                                initialWorkspaceJson={
+                                    activeBlocksState.workspaceJson
+                                }
+                                onContentChange={handleBlocksContentChange}
+                            />
+                        </React.Suspense>
+                    )}
+                    <div
+                        className="pb-editor-monaco"
+                        ref={editorRef}
+                        style={isBlocksActive ? { display: 'none' } : undefined}
+                    />
                 </ContextMenu>
             </ResizeSensor>
             <Button

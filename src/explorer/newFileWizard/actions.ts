@@ -9,6 +9,9 @@ import { pythonFileExtension } from '../../pybricksMicropython/lib';
 /** Supported file extensions. */
 type SupportedFileExtension = typeof pythonFileExtension;
 
+/** The type of program to create. */
+export type ProgramType = 'python' | 'blocks';
+
 /**
  * Requests to show the new file wizard dialog.
  */
@@ -21,17 +24,20 @@ export const newFileWizardShow = createAction(() => ({
  * @param fileName The user-provided file name.
  * @param fileExtension The user-provided file extension.
  * @param hubType The user-provided hub type or undefined for an empty file.
+ * @param programType Whether to create a blocks or python file.
  */
 export const newFileWizardDidAccept = createAction(
     (
         fileName: string,
         fileExtension: SupportedFileExtension,
         hubType: Hub | undefined,
+        programType: ProgramType,
     ) => ({
         type: 'explorer.newFileWizard.action.didAccept',
         fileName,
         fileExtension,
         hubType,
+        programType,
     }),
 );
 

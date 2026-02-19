@@ -23,6 +23,7 @@ import {
     editorReplaceFile,
 } from '../editor/actions';
 import { EditorError } from '../editor/error';
+import { encodeBlocksFile } from '../editor/blockly/serialization';
 import { getPybricksMicroPythonFileTemplate } from '../editor/pybricksMicroPython';
 import { FileStorageDb } from '../fileStorage';
 import {
@@ -352,12 +353,32 @@ function* handleExplorerCreateNewFile(): Generator {
 
         const fileName = `${didAccept.fileName}${didAccept.fileExtension}`;
 
-        yield* put(
-            fileStorageWriteFile(
-                fileName,
-                getPybricksMicroPythonFileTemplate(didAccept.hubType) || '',
-            ),
-        );
+        let fileContent: string;
+        if (didAccept.programType === 'blocks') {
+            // Create initial blocks file with default program block.
+            const defaultWorkspace = {
+                blocks: {
+                    languageVersion: 0,
+                    blocks: [
+                        {
+                            type: 'pb_program',
+                            x: 20,
+                            y: 20,
+                            deletable: false,
+                        },
+                    ],
+                },
+            };
+            fileContent = encodeBlocksFile(
+                defaultWorkspace,
+                '# The main program starts here.\n',
+            );
+        } else {
+            fileContent =
+                getPybricksMicroPythonFileTemplate(didAccept.hubType) || '';
+        }
+
+        yield* put(fileStorageWriteFile(fileName, fileContent));
 
         const { didWrite, didFailToWrite } = yield* race({
             didWrite: take(fileStorageDidWriteFile.when((a) => a.path === fileName)),
