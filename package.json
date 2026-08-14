@@ -10,6 +10,7 @@
     "dependencies": {
         "@babel/core": "^7.23.9",
         "@blueprintjs/core": "^5.8.2",
+        "@neondatabase/serverless": "^1.1.0",
         "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
         "@pybricks/firmware": "7.31.0",
         "@pybricks/ide-docs": "2.20.0",

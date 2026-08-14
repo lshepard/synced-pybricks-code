@@ -2816,6 +2816,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@neondatabase/serverless@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "@neondatabase/serverless@npm:1.1.0"
+  checksum: 15fcae150fc5b1c6fb3da86a717c02587d49535b9ed1fe74b2f495c7392196a16c345a8f75e789a7637d2c1b4cda05e9a53a6c754849201888a6033af3cfcd6b
+  languageName: node
+  linkType: hard
+
 "@nodelib/fs.scandir@npm:2.1.5":
   version: 2.1.5
   resolution: "@nodelib/fs.scandir@npm:2.1.5"
@@ -2973,6 +2980,7 @@ __metadata:
   dependencies:
     "@babel/core": ^7.23.9
     "@blueprintjs/core": ^5.8.2
+    "@neondatabase/serverless": ^1.1.0
     "@pmmmwh/react-refresh-webpack-plugin": ^0.5.11
     "@pybricks/firmware": 7.31.0
     "@pybricks/ide-docs": 2.20.0

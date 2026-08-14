@@ -18,29 +18,37 @@ config.disabled = true;
 
 jest.mock('./fileStorage/hooks');
 
-//https://stackoverflow.com/a/66515427/1976323
-matchMediaPolyfill(window);
+// Tests that talk to a database opt into the node environment, where none of
+// the browser setup below applies and referencing window would throw.
+const isBrowserEnv = typeof window !== 'undefined';
 
-// implementation of window.resizeTo for dispatching event
-window.resizeTo = function resizeTo(width, height) {
-    Object.assign(this, {
-        innerWidth: width,
-        innerHeight: height,
-        outerWidth: width,
-        outerHeight: height,
-    }).dispatchEvent(new this.Event('resize'));
-};
+if (isBrowserEnv) {
+    //https://stackoverflow.com/a/66515427/1976323
+    matchMediaPolyfill(window);
 
-// scroll functions are not implemented in jsdom
-// https://github.com/jsdom/jsdom/issues/1695
+    // implementation of window.resizeTo for dispatching event
+    window.resizeTo = function resizeTo(width, height) {
+        Object.assign(this, {
+            innerWidth: width,
+            innerHeight: height,
+            outerWidth: width,
+            outerHeight: height,
+        }).dispatchEvent(new this.Event('resize'));
+    };
 
-if (!Element.prototype.scrollTo) {
-    Element.prototype.scrollTo = jest.fn();
+    // scroll functions are not implemented in jsdom
+    // https://github.com/jsdom/jsdom/issues/1695
+
+    if (!Element.prototype.scrollTo) {
+        Element.prototype.scrollTo = jest.fn();
+    }
 }
 
-Object.defineProperty(global.self, 'crypto', {
-    value: crypto.webcrypto,
-});
+if (isBrowserEnv) {
+    Object.defineProperty(global.self, 'crypto', {
+        value: crypto.webcrypto,
+    });
+}
 
 // https://github.com/facebook/jest/issues/11698
 function fail(reason: unknown): never {
