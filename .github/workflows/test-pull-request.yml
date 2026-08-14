@@ -22,6 +22,8 @@ jobs:
         node-version: '22.x'
     - uses: actions/checkout@v3
     - run: yarn install
+    # api/ is generated but committed, so it can drift from its sources
+    - run: yarn check:api
     - run: |
         yarn lint
         git diff --exit-code
