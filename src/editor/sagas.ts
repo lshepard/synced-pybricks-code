@@ -470,7 +470,19 @@ function* handleDidCreateEditor(editor: monaco.editor.ICodeEditor): Generator {
     // this should restore all previously open files in the same order
     // the were last used (which may be different from the order in which
     // they were originally opened)
+    const db = yield* getContext<FileStorageDb>('fileStorage');
+
     for (const item of activeFileHistory.getFromStorage()) {
+        // The history can name files that no longer exist: loading a cloud
+        // project replaces the whole file set, and the replacements get new
+        // uuids. Asking for a missing one throws where it cannot be caught
+        // usefully, so check before asking.
+        const stillExists = yield* call(() => db.metadata.get(item));
+
+        if (!stillExists) {
+            continue;
+        }
+
         yield* put(editorActivateFile(item));
 
         yield* race({

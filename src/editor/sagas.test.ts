@@ -4,6 +4,7 @@
 import { mock } from 'jest-mock-extended';
 import * as monaco from 'monaco-editor';
 import { AsyncSaga, uuid } from '../../test';
+import { FileStorageDb } from '../fileStorage';
 import {
     fileStorageDidFailToLoadTextFile,
     fileStorageDidInitialize,
@@ -39,13 +40,30 @@ afterEach(() => {
     sessionStorage.clear();
 });
 
+/**
+ * A file storage stand-in where every requested file exists.
+ *
+ * Restoring the history checks that a file is still there before opening it,
+ * since loading a cloud project replaces the file set and the old uuids stop
+ * resolving.
+ */
+function mockFileStorage(present = true) {
+    return {
+        fileStorage: {
+            metadata: {
+                get: async () => (present ? { uuid: testFileUuid } : undefined),
+            },
+        } as unknown as FileStorageDb,
+    };
+}
+
 it('should activate files from storage', async () => {
     jest.spyOn(
         ActiveFileHistoryManager.prototype,
         'getFromStorage',
     ).mockReturnValueOnce([testFileUuid].values());
 
-    const saga = new AsyncSaga(editor);
+    const saga = new AsyncSaga(editor, mockFileStorage());
 
     monaco.editor.create(document.createElement('div'));
 
@@ -55,6 +73,30 @@ it('should activate files from storage', async () => {
 
     // other editor actions on create should take place after editorDidCreate()
     await expect(saga.take()).resolves.toEqual(editorActivateFile(testFileUuid));
+
+    await saga.end();
+});
+
+it('should skip files from storage that no longer exist', async () => {
+    // Loading a cloud project replaces every file, and the replacements get
+    // new uuids, so the history left over from before names files that are
+    // gone. Opening one throws inside a dexie transaction, which reached the
+    // console as "file with uuid ... not found" on the next page load.
+    jest.spyOn(
+        ActiveFileHistoryManager.prototype,
+        'getFromStorage',
+    ).mockReturnValueOnce([testFileUuid].values());
+
+    const saga = new AsyncSaga(editor, mockFileStorage(false));
+
+    monaco.editor.create(document.createElement('div'));
+
+    saga.put(fileStorageDidInitialize([]));
+
+    await expect(saga.take()).resolves.toEqual(editorDidCreate());
+
+    // nothing further: the missing file is passed over rather than opened
+    expect(saga.numPending()).toBe(0);
 
     await saga.end();
 });
@@ -85,7 +127,7 @@ describe('per-editor sagas', () => {
             'getFromStorage',
         ).mockReturnValueOnce([].values());
 
-        saga = new AsyncSaga(editor);
+        saga = new AsyncSaga(editor, mockFileStorage());
         saga.updateState({ fileStorage: { isInitialized: true } });
 
         monacoEditor = monaco.editor.create(document.createElement('div'));
