@@ -8,6 +8,30 @@ import { defineConfig, devices } from '@playwright/test';
 const baseURL = process.env.E2E_URL ?? 'http://localhost:3000';
 const useLocalServer = !process.env.E2E_URL;
 
+// These tests create projects and save versions through the real UI, so they
+// write to whatever database the deployment they point at is using. Running
+// them against production fills the team's project list with test data, which
+// is exactly what happened once. Preview deployments get their own database
+// branch, so those are the ones to point at.
+//
+// Set E2E_ALLOW_PRODUCTION=1 to override, deliberately.
+const productionHosts = [
+    'synced-pybricks-code.vercel.app',
+    'code.jahnrobotics.org',
+];
+
+if (
+    !process.env.E2E_ALLOW_PRODUCTION &&
+    productionHosts.some((host) => baseURL.includes(host))
+) {
+    throw new Error(
+        `Refusing to run browser tests against ${baseURL}.\n` +
+            'These write real projects to whatever database that deployment uses.\n' +
+            'Point E2E_URL at a preview deployment instead, which has its own\n' +
+            'database branch. To override, set E2E_ALLOW_PRODUCTION=1.',
+    );
+}
+
 export default defineConfig({
     testDir: './e2e',
     // these talk to one shared database, so parallel runs would fight over
