@@ -179,7 +179,8 @@
     },
     "jest": {
         "roots": [
-            "<rootDir>/src"
+            "<rootDir>/src",
+            "<rootDir>/api"
         ],
         "collectCoverageFrom": [
             "src/**/*.{js,jsx,ts,tsx}",
@@ -193,7 +194,8 @@
         ],
         "testMatch": [
             "<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}",
-            "<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}"
+            "<rootDir>/src/**/*.{spec,test}.{js,jsx,ts,tsx}",
+            "<rootDir>/api/**/*.{spec,test}.{js,jsx,ts,tsx}"
         ],
         "testEnvironment": "./test/env",
         "transform": {

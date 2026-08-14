@@ -183,15 +183,22 @@ export async function setArchived(
  * @returns The feed.
  */
 export async function getVersions(sql: Sql, slug: string): Promise<VersionInfo[]> {
+    // Selecting from project with a left join keeps "no such project" and "no
+    // versions yet" apart in one round trip: a missing project yields no rows
+    // at all, whereas an empty one yields a single row with a null id.
     const rows = (await sql`
         select v.id, v.saved_at, v.author, v.note
-        from project_version v
-        join project p on p.id = v.project_id
+        from project p
+        left join project_version v on v.project_id = p.id
         where p.slug = ${slug}
         order by v.saved_at desc, v.id desc
-    `) as VersionRow[];
+    `) as (VersionRow | { id: null })[];
 
-    return rows.map(toVersion);
+    if (rows.length === 0) {
+        throw new CloudError('NotFound', `no project '${slug}'`);
+    }
+
+    return rows.filter((r): r is VersionRow => r.id !== null).map(toVersion);
 }
 
 /**

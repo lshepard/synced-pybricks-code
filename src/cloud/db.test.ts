@@ -473,6 +473,20 @@ describeDb('database', () => {
         });
     });
 
+    describe('getVersions', () => {
+        it('should return an empty feed for a project with no saves', async () => {
+            const project = await newProject('NeverSaved');
+            expect(await getVersions(sql, project.slug)).toEqual([]);
+        });
+
+        it('should reject an unknown project rather than return an empty feed', async () => {
+            // otherwise a mistyped link looks like a project with no history
+            await expect(getVersions(sql, 'no-such-project')).rejects.toMatchObject({
+                name: 'NotFound',
+            });
+        });
+    });
+
     describe('getVersion', () => {
         it('should reject an unknown version', async () => {
             const project = await newProject('NoVersion');
