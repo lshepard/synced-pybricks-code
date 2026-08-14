@@ -92,17 +92,14 @@ start over.
 run both, and so to run the browser tests without a deployment:
 
 ```
-vercel dev --listen 3000
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/main vercel dev --listen 3000
 ```
 
 It runs `yarn start` behind it, per `devCommand` in `vercel.json`, because
 Vercel otherwise guesses `react-scripts start`, which this project does not
-have. The functions read `DATABASE_URL` from `.env.development.local`, which is
-gitignored, so point it at the local database:
-
-```
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/main
-```
+have. The functions inherit the environment of the command, and that is the
+way to give them a connection string: an `.env.local` in the repository, or
+what `vercel pull` writes to `.vercel/`, does not reach them.
 
 ## Setting up the deployed database
 
