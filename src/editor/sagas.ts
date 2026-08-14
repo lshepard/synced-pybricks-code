@@ -410,52 +410,18 @@ function* handleDidCreateEditor(editor: monaco.editor.ICodeEditor): Generator {
     const openFiles = new OpenFileManager();
     const activeFileHistory = new ActiveFileHistoryManager(editor.getId());
 
-    // These handlers are bound to this editor, so they have to end with it.
-    // Otherwise an editor that is unmounted and replaced leaves its handlers
-    // running against a disposed widget, and calls into it are silently
-    // dropped: files load and show in the explorer, but nothing is drawn.
-    const disposed = eventChannel<boolean>((emit) => {
-        const subscription = editor.onDidDispose(() => emit(true));
-        return () => subscription.dispose();
-    });
-
-    const tasks = [
-        yield* takeEvery(editorGetValueRequest, handleEditorGetValueRequest, editor),
-        yield* takeEvery(editorOpenFile, handleEditorOpenFile, editor, openFiles),
-        yield* takeEvery(
-            editorActivateFile,
-            handleEditorActivateFile,
-            editor,
-            openFiles,
-            activeFileHistory,
-        ),
-        yield* takeEvery(editorGoto, handleEditorGoto, editor),
-        yield* takeEvery(
-            editorDidCloseFile,
-            handleEditorDidCloseFile,
-            activeFileHistory,
-        ),
-        yield* fork(monitorViewState, editor),
-    ];
-
-    yield* fork(function* () {
-        yield* take(disposed);
-        disposed.close();
-
-        // Close the open files first. Cancelling their tasks outright would
-        // leave a tab behind for each one, since the task that owns a file is
-        // also what reports it closed and what removes it from the open list.
-        const stillOpen = yield* select((s: RootState) => s.editor.openFileUuids);
-
-        for (const uuid of stillOpen) {
-            yield* put(editorCloseFile(uuid));
-            yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
-        }
-
-        for (const task of tasks) {
-            task.cancel();
-        }
-    });
+    yield* takeEvery(editorGetValueRequest, handleEditorGetValueRequest, editor);
+    yield* takeEvery(editorOpenFile, handleEditorOpenFile, editor, openFiles);
+    yield* takeEvery(
+        editorActivateFile,
+        handleEditorActivateFile,
+        editor,
+        openFiles,
+        activeFileHistory,
+    );
+    yield* takeEvery(editorGoto, handleEditorGoto, editor);
+    yield* takeEvery(editorDidCloseFile, handleEditorDidCloseFile, activeFileHistory);
+    yield* fork(monitorViewState, editor);
 
     yield* put(editorDidCreate());
 
