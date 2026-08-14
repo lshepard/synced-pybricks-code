@@ -23,5 +23,5 @@
         "emitDecoratorMetadata": true,
         "noFallthroughCasesInSwitch": true
     },
-    "include": ["src", "test", "api"]
+    "include": ["src", "test"]
 }

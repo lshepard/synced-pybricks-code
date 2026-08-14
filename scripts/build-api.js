@@ -1,20 +1,22 @@
 'use strict';
 
-// Bundles the serverless functions.
+// Builds the serverless functions.
 //
-// Vercel compiles each file in api/ on its own and does not follow imports out
-// of that directory, so anything a route pulls in from src/ is missing at
-// runtime. Bundling each route into a self-contained file avoids that without
-// having to duplicate the database layer under api/.
+// Vercel compiles each file it finds in api/ on its own and does not follow
+// imports out of that directory, so a route written there cannot use the
+// database layer in src/. The sources therefore live in src/cloud/routes and
+// are bundled into api/ as self-contained modules, which keeps one copy of the
+// database code and gives Vercel exactly the files it expects.
 //
-// The .ts sources stay in place for editing and testing; the .js files written
-// beside them are what actually deploy.
+// api/ is entirely generated. Nothing in it is checked in.
 
 const fs = require('fs');
 const path = require('path');
 const esbuild = require('esbuild');
 
-const apiDir = path.join(__dirname, '..', 'api');
+const root = path.join(__dirname, '..');
+const sourceDir = path.join(root, 'src', 'cloud', 'routes');
+const apiDir = path.join(root, 'api');
 
 /** Lists the route sources, skipping tests and shared helpers. */
 function findRoutes(dir) {
@@ -28,12 +30,12 @@ function findRoutes(dir) {
             continue;
         }
 
-        if (!entry.name.endsWith('.ts')) {
-            continue;
-        }
-
-        // _lib is imported by the routes, and tests never deploy
-        if (entry.name.startsWith('_') || entry.name.includes('.test.')) {
+        // _lib is pulled in by the routes, and tests never deploy
+        if (
+            !entry.name.endsWith('.ts') ||
+            entry.name.startsWith('_') ||
+            entry.name.includes('.test.')
+        ) {
             continue;
         }
 
@@ -43,34 +45,36 @@ function findRoutes(dir) {
     return found;
 }
 
-const routes = findRoutes(apiDir);
+const routes = findRoutes(sourceDir);
 
 if (routes.length === 0) {
-    console.log('no api routes to bundle');
-    process.exit(0);
+    console.error('no api routes found in', sourceDir);
+    process.exit(1);
 }
+
+// start clean so a renamed or deleted route cannot linger as a stale function
+fs.rmSync(apiDir, { recursive: true, force: true });
 
 esbuild
     .build({
         entryPoints: routes,
         outdir: apiDir,
-        // without this esbuild derives a common base from the entry points and
-        // flattens away the directories, but a route's path is its URL
-        outbase: apiDir,
-        // .mjs so node treats these as modules regardless of the package type,
-        // which it otherwise has to guess at by reparsing
+        // a route's path is its URL, so the directory layout has to survive;
+        // without this esbuild flattens to a common base
+        outbase: sourceDir,
+        // .mjs so node treats these as modules outright, rather than reparsing
+        // to work out the module type
         outExtension: { '.js': '.mjs' },
         bundle: true,
         platform: 'node',
         target: 'node22',
         format: 'esm',
-        // the driver is a real dependency at runtime; bundling it is
-        // unnecessary weight in every function
+        // a real dependency at runtime, so bundling it is only weight
         external: ['@neondatabase/serverless'],
         logLevel: 'warning',
     })
     .then(() => {
-        console.log(`bundled ${routes.length} api routes`);
+        console.log(`bundled ${routes.length} api routes into api/`);
     })
     .catch((err) => {
         console.error(err);

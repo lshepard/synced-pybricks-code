@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Luke Shepard
 
-import { connect, setArchived } from '../../../src/cloud/db';
+import { connect, setArchived } from '../../../db';
 import { body, handle, json, segments } from '../../_lib';
 
 export function POST(request: Request): Promise<Response> {

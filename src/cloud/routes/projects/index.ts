@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Luke Shepard
 
-import { connect, createProject, getProjects } from '../../src/cloud/db';
+import { connect, createProject, getProjects } from '../../db';
 import { body, handle, json, requireString } from '../_lib';
 
 export function GET(): Promise<Response> {

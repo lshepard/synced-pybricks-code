@@ -6,7 +6,7 @@
 // Route files are kept thin on purpose: they parse a request and delegate to
 // src/cloud/db.ts, which is where the logic and its tests live.
 
-import { CloudError } from '../src/cloud/db';
+import { CloudError } from '../db';
 
 /** Maps a failure to the status code that best describes it. */
 const statusByError: Record<string, number> = {

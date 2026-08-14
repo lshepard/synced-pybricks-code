@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Luke Shepard
 
-import { acquireLock, connect, getLock, releaseLock } from '../../../src/cloud/db';
+import { acquireLock, connect, getLock, releaseLock } from '../../../db';
 import { body, handle, json, requireString, segments } from '../../_lib';
 
 function slugOf(request: Request): string {

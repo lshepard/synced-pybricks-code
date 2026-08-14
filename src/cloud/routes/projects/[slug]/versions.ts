@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Luke Shepard
 
-import { addVersion, connect, getVersion, getVersions } from '../../../src/cloud/db';
+import { addVersion, connect, getVersion, getVersions } from '../../../db';
 import { body, handle, json, requireString, segments } from '../../_lib';
 
 /** Reads the slug, and an optional version id, from /api/projects/<slug>/versions[/<id>]. */
