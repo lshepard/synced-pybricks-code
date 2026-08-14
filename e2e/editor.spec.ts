@@ -36,15 +36,38 @@ async function createProject(page: Page, label: string): Promise<string> {
     const name = `${runId} ${label}`;
 
     await page.getByRole('button', { name: 'New project' }).click();
-    await page.getByPlaceholder('Line Follower').fill(name);
-    await page.getByRole('button', { name: 'Create' }).click();
+
+    const dialog = page.getByRole('dialog').filter({ hasText: 'New project' });
+    await dialog.getByPlaceholder('Line Follower').fill(name);
+    await dialog.getByRole('button', { name: 'Create' }).click();
 
     await expect(page).toHaveURL(/\/project\//, { timeout: 30_000 });
 
     return name;
 }
 
-/** Types into the code editor. */
+/**
+ * Adds a file through the explorer, as a person would.
+ *
+ * A new project has no files, so this is how the first one gets made.
+ */
+async function addFile(page: Page, name = 'main'): Promise<void> {
+    await page.getByRole('button', { name: /add.*new|new file/i }).click();
+
+    // scoped to the dialog, since "Create" also names a dashboard button
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Create a new file' });
+    await expect(dialog).toBeVisible();
+
+    await dialog.getByRole('textbox').first().fill(name);
+    await dialog.getByRole('button', { name: 'Create' }).click();
+
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('.monaco-editor').first()).toBeVisible({
+        timeout: 30_000,
+    });
+}
+
+/** Replaces whatever is in the code editor. */
 async function typeCode(page: Page, code: string): Promise<void> {
     const editor = page.locator('.monaco-editor').first();
     await expect(editor).toBeVisible({ timeout: 30_000 });
@@ -58,15 +81,15 @@ async function typeCode(page: Page, code: string): Promise<void> {
 async function save(page: Page, note = ''): Promise<void> {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-    const noteField = page.getByPlaceholder('fixed the turn radius');
-    await expect(noteField).toBeVisible();
+    const dialog = page.getByRole('dialog').filter({ hasText: 'Save to the cloud' });
+    await expect(dialog).toBeVisible();
 
     if (note) {
-        await noteField.fill(note);
+        await dialog.getByPlaceholder('fixed the turn radius').fill(note);
     }
 
-    await page.getByRole('button', { name: 'Save', exact: true }).last().click();
-    await expect(noteField).toBeHidden({ timeout: 30_000 });
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(dialog).toBeHidden({ timeout: 30_000 });
 }
 
 test.describe('the editor', () => {
@@ -93,6 +116,7 @@ test.describe('the editor', () => {
     test('should keep code across a save and reload', async ({ page }) => {
         await arrive(page);
         await createProject(page, 'RoundTrip');
+        await addFile(page);
 
         const code = 'from pybricks.hubs import PrimeHub\nhub = PrimeHub()\n';
         await typeCode(page, code);
@@ -117,6 +141,7 @@ test.describe('the editor', () => {
 
         // first project, with something identifiable in it
         await createProject(page, 'AlphaSide');
+        await addFile(page);
         await typeCode(page, 'ALPHA_MARKER = 1\n');
         await save(page, 'alpha');
 
@@ -124,6 +149,7 @@ test.describe('the editor', () => {
         await page.getByRole('link', { name: 'Jahn Robotics' }).click();
         await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
         await createProject(page, 'BetaSide');
+        await addFile(page);
         await typeCode(page, 'BETA_MARKER = 2\n');
         await save(page, 'beta');
 
@@ -157,6 +183,7 @@ test.describe('the editor', () => {
 
         await arrive(page);
         const first = await createProject(page, 'Bounce');
+        await addFile(page);
         await typeCode(page, 'BOUNCE = 1\n');
         await save(page);
 
@@ -185,6 +212,7 @@ test.describe('the editor', () => {
     }) => {
         await arrive(page);
         await createProject(page, 'History');
+        await addFile(page);
 
         await typeCode(page, 'VERSION_ONE = 1\n');
         await save(page, 'version one');

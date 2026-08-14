@@ -3,6 +3,7 @@
 
 // Swapping the editor's file set for a project's.
 
+import * as monaco from 'monaco-editor';
 import { useCallback } from 'react';
 import { useDispatch, useStore } from 'react-redux';
 import { editorActivateFile, editorCloseFile } from '../editor/actions';
@@ -12,6 +13,15 @@ import { firstFileUuid, replaceAllFiles } from './localFiles';
 
 /** How long to wait for the editor to let go of its files. */
 const closeTimeoutMs = 4000;
+
+/** Waits until a condition holds, or the deadline passes. */
+async function waitFor(done: () => boolean): Promise<void> {
+    const deadline = Date.now() + closeTimeoutMs;
+
+    while (!done() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+}
 
 /**
  * Replaces the editor's files, closing whatever is open first.
@@ -37,17 +47,17 @@ export function useReplaceProjectFiles(): (
             if (open.length > 0) {
                 open.forEach((uuid) => dispatch(editorCloseFile(uuid)));
 
-                // The editor releases each lock as it closes. Waiting for the
-                // store to empty is more reliable than waiting on the actions,
-                // which can be missed if a close is already in flight.
-                const deadline = Date.now() + closeTimeoutMs;
-
-                while (
-                    store.getState().editor.openFileUuids.length > 0 &&
-                    Date.now() < deadline
-                ) {
-                    await new Promise((resolve) => setTimeout(resolve, 25));
-                }
+                // Redux empties as soon as the close is dispatched, but the
+                // editor disposes its monaco model a little later. Waiting on
+                // the models is what matters: creating a model throws if one
+                // already exists for the same uri, and uris are built from
+                // file uuids, so a recycled uuid whose model is still around
+                // leaves a tab open with nothing behind it.
+                await waitFor(
+                    () =>
+                        store.getState().editor.openFileUuids.length === 0 &&
+                        monaco.editor.getModels().length === 0,
+                );
             }
 
             await replaceAllFiles(files);

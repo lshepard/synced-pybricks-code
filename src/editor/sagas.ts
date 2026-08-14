@@ -168,6 +168,16 @@ function* handleEditorOpenFile(
 
             defined(didLoad);
 
+            // createModel throws if one already exists for this uri. That can
+            // happen when a file is closed and another is opened with the same
+            // uuid before the first model finished disposing, which would
+            // otherwise leave an open tab with no editor behind it.
+            const existing = monaco.editor.getModel(modelUri);
+
+            if (existing) {
+                existing.dispose();
+            }
+
             const model = monaco.editor.createModel(
                 didLoad.value,
                 pybricksMicroPythonId,
