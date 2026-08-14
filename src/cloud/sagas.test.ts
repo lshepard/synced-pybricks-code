@@ -3,6 +3,7 @@
 
 import { AsyncSaga, uuid } from '../../test';
 import {
+    editorActivateFile,
     editorCloseFile,
     editorDidCloseFile,
     editorReplaceFile,
@@ -27,11 +28,21 @@ import cloud from './sagas';
 const mainUuid = uuid(0);
 const helpersUuid = uuid(1);
 
-/** A file storage stand-in holding the given paths. */
-function mockStorage(files: Array<{ path: string; uuid: string }>) {
+/**
+ * A file storage stand-in.
+ *
+ * The saga reads storage twice: once to work out what to change, and again at
+ * the end to pick a file to show. `after` is what the second read returns, so
+ * a test can say what storage looks like once the writes have landed.
+ */
+function mockStorage(files: Array<{ path: string; uuid: string }>, after = files) {
+    let reads = 0;
+
     return {
         fileStorage: {
-            metadata: { toArray: async () => files },
+            metadata: {
+                toArray: async () => (reads++ === 0 ? files : after),
+            },
         } as unknown as FileStorageDb,
     };
 }
@@ -114,6 +125,9 @@ describe('loading a project', () => {
         );
 
         saga.put(fileStorageDidWriteFile('main.py', mainUuid));
+
+        // nothing was open, so a file is opened to show
+        await expect(saga.take()).resolves.toEqual(editorActivateFile(mainUuid));
         await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
 
         await saga.end();
@@ -122,7 +136,10 @@ describe('loading a project', () => {
     it('should remove a file the project does not have', async () => {
         const saga = new AsyncSaga(
             cloud,
-            mockStorage([{ path: 'stale.py', uuid: helpersUuid }]),
+            mockStorage(
+                [{ path: 'stale.py', uuid: helpersUuid }],
+                [{ path: 'main.py', uuid: mainUuid }],
+            ),
         );
         saga.updateState({ editor: { openFileUuids: [] } });
 
@@ -137,6 +154,8 @@ describe('loading a project', () => {
         );
 
         saga.put(fileStorageDidWriteFile('main.py', mainUuid));
+
+        await expect(saga.take()).resolves.toEqual(editorActivateFile(mainUuid));
         await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
 
         await saga.end();
@@ -147,7 +166,10 @@ describe('loading a project', () => {
         // editor is asked to let go of it first
         const saga = new AsyncSaga(
             cloud,
-            mockStorage([{ path: 'stale.py', uuid: helpersUuid }]),
+            mockStorage(
+                [{ path: 'stale.py', uuid: helpersUuid }],
+                [{ path: 'main.py', uuid: mainUuid }],
+            ),
         );
         saga.updateState({ editor: { openFileUuids: [helpersUuid] } });
 
@@ -164,7 +186,13 @@ describe('loading a project', () => {
             fileStorageWriteFile('main.py', 'print(1)'),
         );
 
+        // the editor let go of the file it had open, which is the state the
+        // saga sees when it looks for something to show
+        saga.updateState({ editor: { openFileUuids: [] } });
+
         saga.put(fileStorageDidWriteFile('main.py', mainUuid));
+
+        await expect(saga.take()).resolves.toEqual(editorActivateFile(mainUuid));
         await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
 
         await saga.end();
@@ -173,7 +201,7 @@ describe('loading a project', () => {
     it('should empty storage for a project with no files', async () => {
         const saga = new AsyncSaga(
             cloud,
-            mockStorage([{ path: 'main.py', uuid: mainUuid }]),
+            mockStorage([{ path: 'main.py', uuid: mainUuid }], []),
         );
         saga.updateState({ editor: { openFileUuids: [] } });
 

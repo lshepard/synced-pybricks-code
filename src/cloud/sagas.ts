@@ -15,7 +15,6 @@
 
 import {
     call,
-    delay,
     getContext,
     put,
     race,
@@ -24,6 +23,7 @@ import {
     takeEvery,
 } from 'typed-redux-saga/macro';
 import {
+    editorActivateFile,
     editorCloseFile,
     editorDidCloseFile,
     editorReplaceFile,
@@ -97,16 +97,7 @@ function* deleteFile(path: string, uuid: string): Generator {
     // editor has to let go of it first
     if (openUuids.includes(uuid as never)) {
         yield* put(editorCloseFile(uuid as never));
-
-        // The editor confirms a close from the task that opened the file, and
-        // that task ends with the editor widget. Navigating between projects
-        // replaces the widget, so a file opened by the previous one is never
-        // confirmed and waiting alone would hang. The delete below is the real
-        // check: it fails if the file is still held.
-        yield* race({
-            closed: take(editorDidCloseFile.when((a) => a.uuid === uuid)),
-            timeout: delay(2000),
-        });
+        yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
     }
 
     yield* put(fileStorageDeleteFile(path));
@@ -155,6 +146,22 @@ function* handleCloudLoadFiles(action: ReturnType<typeof cloudLoadFiles>): Gener
             }
 
             yield* call(writeFile, path, contents);
+        }
+
+        // Show something. Writing a file puts it in the explorer but does not
+        // open it, so without this the editor pane stays empty with a project
+        // fully loaded behind it.
+        const openNow = yield* select((s: RootState) => s.editor.openFileUuids);
+
+        if (openNow.length === 0) {
+            const files = yield* call(() => db.metadata.toArray());
+
+            // main.py is the program a hub runs, so it is the one to show
+            const first = files.find((f) => f.path === 'main.py') ?? files[0];
+
+            if (first) {
+                yield* put(editorActivateFile(first.uuid));
+            }
         }
 
         yield* put(cloudDidLoadFiles());

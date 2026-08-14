@@ -15,6 +15,7 @@ import createSagaMiddleware from 'redux-saga';
 import { appVersion } from './app/constants';
 import Dashboard from './cloud/Dashboard';
 import ProjectPage from './cloud/ProjectPage';
+import { debugMiddleware } from './cloud/debug';
 import { cloudMiddleware } from './cloud/useProjectFiles';
 import { db } from './fileStorage/context';
 import { i18nManager } from './i18n';
@@ -46,6 +47,7 @@ const store = configureStore({
         getDefaultMiddleware({ serializableCheck })
             .concat(sagaMiddleware)
             .concat(cloudMiddleware)
+            .concat(debugMiddleware)
             .concat(loggerMiddleware),
 });
 

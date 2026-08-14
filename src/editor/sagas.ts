@@ -442,6 +442,16 @@ function* handleDidCreateEditor(editor: monaco.editor.ICodeEditor): Generator {
         yield* take(disposed);
         disposed.close();
 
+        // Close the open files first. Cancelling their tasks outright would
+        // leave a tab behind for each one, since the task that owns a file is
+        // also what reports it closed and what removes it from the open list.
+        const stillOpen = yield* select((s: RootState) => s.editor.openFileUuids);
+
+        for (const uuid of stillOpen) {
+            yield* put(editorCloseFile(uuid));
+            yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
+        }
+
         for (const task of tasks) {
             task.cancel();
         }
