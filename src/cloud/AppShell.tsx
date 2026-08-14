@@ -2,9 +2,10 @@
 // Copyright (c) 2026 Luke Shepard
 
 import './cloud.scss';
-import React from 'react';
+import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import App from '../app/App';
+import { showFileList } from './preferences';
 
 /**
  * Holds the editor for the life of the session.
@@ -21,6 +22,15 @@ import App from '../app/App';
 const AppShell: React.FunctionComponent = () => {
     const { pathname } = useLocation();
     const inProject = pathname.startsWith('/project/');
+
+    // Runs once, before the first render. The sidebar reads its selection from
+    // storage when it mounts, and since the editor mounts once and stays, that
+    // read happens once too, so this has to be set before it rather than in an
+    // effect afterwards.
+    useState(() => {
+        showFileList();
+        return null;
+    });
 
     return (
         <>

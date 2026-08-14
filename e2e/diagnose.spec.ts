@@ -72,6 +72,9 @@ async function report(page: Page, label: string) {
     console.log('  editor shows   :', JSON.stringify(state.text));
 }
 
+// walks several full page loads, each with a cold serverless call behind it
+test.setTimeout(180_000);
+
 test('creating a file, and reopening a project', async ({ page }) => {
     await page.addInitScript(() => {
         window.localStorage.setItem('tour.showOnStartup', 'false');
