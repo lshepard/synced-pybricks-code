@@ -27,14 +27,32 @@ $header-height: 40px;
     flex-direction: column;
     height: 100%;
     min-height: 0;
+}
+
+// Holds the editor and, while a project is loading, a cover over it. The
+// editor stays mounted underneath: unmounting disposes the monaco widget that
+// the editor saga still holds a reference to.
+.pb-cloud-editor-host {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
 
     // the editor root, which must shrink to what is left rather than
     // insisting on the full height
     > .pb-app {
-        flex: 1 1 auto;
-        min-height: 0;
-        height: auto;
+        height: 100%;
     }
+}
+
+.pb-cloud-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    // enough to read as busy without hiding what is behind it
+    background-color: rgb(255 255 255 / 70%);
+    z-index: 10;
 }
 
 .pb-cloud-header {

@@ -83,6 +83,13 @@ const root = createRoot(container);
 
 // The dashboard is the entry point, and the editor lives under a project, so
 // that a project can be linked to and reopened.
+//
+// Navigating away from a project unmounts the editor, which disposes its
+// monaco widget. The editor saga starts with the app and binds to each widget
+// monaco creates without releasing the last, so coming back leaves an old
+// handler writing to a disposed widget: files load and appear in the explorer,
+// but the editor pane stays empty. Keeping the whole app in one route means
+// the editor is created once and stays.
 const router = createBrowserRouter([
     { path: '/', element: <Dashboard /> },
     { path: '/project/:slug', element: <ProjectPage /> },

@@ -179,33 +179,38 @@ const ProjectPage: React.FunctionComponent = () => {
 
     const heldByOther = lock === undefined && phase === 'ready';
 
-    if (askName) {
-        return (
-            <NameGate
-                onDone={(name) => {
-                    setWho(name);
-                    setAskName(false);
-                }}
-            />
-        );
-    }
-
-    if (phase === 'failed') {
-        return (
-            <>
-                <CloudHeader who={who} />
-                <div className="pb-cloud-dashboard">
-                    <div className="pb-cloud-dashboard-inner">
-                        <div className="pb-cloud-error">{error}</div>
-                        <Button text="Back to projects" onClick={() => navigate('/')} />
-                    </div>
-                </div>
-            </>
-        );
-    }
-
+    // Neither the name prompt nor a failure returns early: doing so unmounts
+    // the editor, and the saga driving it keeps a reference to the widget that
+    // unmounting disposed, after which nothing is ever drawn. Both are shown
+    // over the editor instead.
     return (
         <div className="pb-cloud-page">
+            {askName && (
+                <NameGate
+                    onDone={(name) => {
+                        setWho(name);
+                        setAskName(false);
+                    }}
+                />
+            )}
+
+            {phase === 'failed' && (
+                <Dialog isOpen={true} title="Cannot open this project">
+                    <DialogBody>
+                        <div className="pb-cloud-error">{error}</div>
+                    </DialogBody>
+                    <DialogFooter
+                        actions={
+                            <Button
+                                intent="primary"
+                                text="Back to projects"
+                                onClick={() => navigate('/')}
+                            />
+                        }
+                    />
+                </Dialog>
+            )}
+
             <CloudHeader
                 projectName={project?.name}
                 who={who}
@@ -261,13 +266,24 @@ const ProjectPage: React.FunctionComponent = () => {
                 </div>
             )}
 
-            {phase === 'loading' && (
-                <div style={{ padding: 40, textAlign: 'center' }}>
-                    <Spinner />
-                </div>
-            )}
-
-            {phase === 'ready' && <App />}
+            {/*
+             * The editor is mounted once and stays mounted. Unmounting it
+             * disposes the monaco widget, but the saga that drives the editor
+             * starts with the app and keeps a reference to whichever widget
+             * it saw first, so it goes on calling setModel on a disposed one.
+             * That is silent apart from a console warning: files load into
+             * storage and appear in the explorer, but nothing is ever drawn.
+             *
+             * So loading is shown over the editor rather than instead of it.
+             */}
+            <div className="pb-cloud-editor-host">
+                <App />
+                {phase === 'loading' && (
+                    <div className="pb-cloud-loading">
+                        <Spinner />
+                    </div>
+                )}
+            </div>
 
             <Dialog
                 isOpen={phase === 'confirmSwitch'}

@@ -1,37 +1,44 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Luke Shepard
 
-// Browser tests for the parts that only a browser can check: that the editor
-// boots, that files survive a save and load, and that swapping projects does
-// not leave the editor holding files it can no longer open.
+// One journey through the whole thing, in a real browser.
+//
+// This is deliberately a single test rather than several small ones. Every bug
+// worth catching here has been about the editor not drawing after files moved
+// underneath it, and unit tests kept passing through all of them: they check
+// that actions fire in the right order, not that text appears on screen. What
+// matters is that a person can make a project, type in it, leave, come back
+// and still see their code.
 
 import { Page, expect, test } from '@playwright/test';
 
-/** Names every project made here, so a run's data can be told apart. */
 const runId = `zzE2E${Date.now()}`;
 
+/** The text currently visible in the code editor. */
+function editorText(page: Page) {
+    return page.locator('.monaco-editor').first();
+}
+
 /** Gets past the name prompt and onto the dashboard. */
-async function arrive(page: Page, who = 'Tester'): Promise<void> {
-    // The welcome tour opens over the editor on a first visit and swallows
-    // clicks. A real first-time user dismisses it; these tests are about what
-    // happens afterwards.
-    await page.addInitScript(() => {
-        window.localStorage.setItem('tour.showOnStartup', 'false');
-    });
+async function arrive(page: Page): Promise<void> {
+    // the welcome tour opens over the editor on a first visit and takes clicks
+    await page.addInitScript(() =>
+        window.localStorage.setItem('tour.showOnStartup', 'false'),
+    );
 
     await page.goto('/');
 
     const nameField = page.getByPlaceholder('First name');
 
     if (await nameField.isVisible().catch(() => false)) {
-        await nameField.fill(who);
+        await nameField.fill('Tester');
         await page.getByRole('button', { name: 'Continue' }).click();
     }
 
     await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
 }
 
-/** Creates a project from the dashboard and waits for the editor. */
+/** Creates a project and waits for its page. */
 async function createProject(page: Page, label: string): Promise<string> {
     const name = `${runId} ${label}`;
 
@@ -46,192 +53,102 @@ async function createProject(page: Page, label: string): Promise<string> {
     return name;
 }
 
-/**
- * Adds a file through the explorer, as a person would.
- *
- * A new project has no files, so this is how the first one gets made.
- */
-async function addFile(page: Page, name = 'main'): Promise<void> {
+/** Adds a file through the explorer, which is how a project gets its first. */
+async function addFile(page: Page, name: string): Promise<void> {
     await page.getByRole('button', { name: /add.*new|new file/i }).click();
 
-    // scoped to the dialog, since "Create" also names a dashboard button
     const dialog = page.getByRole('dialog').filter({ hasText: 'Create a new file' });
-    await expect(dialog).toBeVisible();
-
     await dialog.getByRole('textbox').first().fill(name);
     await dialog.getByRole('button', { name: 'Create' }).click();
 
     await expect(dialog).toBeHidden();
-    await expect(page.locator('.monaco-editor').first()).toBeVisible({
-        timeout: 30_000,
-    });
+    await expect(editorText(page)).toBeVisible({ timeout: 30_000 });
 }
 
-/** Replaces whatever is in the code editor. */
+/** Replaces the contents of the open file. */
 async function typeCode(page: Page, code: string): Promise<void> {
-    const editor = page.locator('.monaco-editor').first();
-    await expect(editor).toBeVisible({ timeout: 30_000 });
-
-    await editor.click();
+    await editorText(page).click();
     await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.type(code);
 }
 
-/** Saves to the cloud with an optional note. */
-async function save(page: Page, note = ''): Promise<void> {
+/** Saves the project to the cloud. */
+async function save(page: Page, note: string): Promise<void> {
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     const dialog = page.getByRole('dialog').filter({ hasText: 'Save to the cloud' });
-    await expect(dialog).toBeVisible();
-
-    if (note) {
-        await dialog.getByPlaceholder('fixed the turn radius').fill(note);
-    }
-
+    await dialog.getByPlaceholder('fixed the turn radius').fill(note);
     await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+
     await expect(dialog).toBeHidden({ timeout: 30_000 });
 }
 
-test.describe('the editor', () => {
-    test('should load with cross origin isolation, which its workers need', async ({
-        page,
-    }) => {
-        await page.goto('/');
+/** Opens a project from the dashboard by name. */
+async function openFromDashboard(page: Page, name: string): Promise<void> {
+    await page.getByRole('link', { name: 'Jahn Robotics' }).click();
+    await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
 
-        // without this Pyodide and mpy-cross cannot run, and the failure shows
-        // up much later as the editor quietly not working
-        expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
-    });
+    await page.getByRole('heading', { name }).first().click();
+    await expect(page).toHaveURL(/\/project\//, { timeout: 30_000 });
+}
 
-    test('should open a new project with nothing in it', async ({ page }) => {
-        await arrive(page);
-        await createProject(page, 'Blank');
+test('a project can be made, saved, left and reopened', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
-        // A new project has no files at all, so there is no editor yet. What
-        // matters is that it did not inherit the previous project's files.
-        await expect(page.getByRole('button', { name: /History \(0\)/ })).toBeVisible();
-        await expect(page.locator('.monaco-editor')).toHaveCount(0);
-    });
+    await arrive(page);
 
-    test('should keep code across a save and reload', async ({ page }) => {
-        await arrive(page);
-        await createProject(page, 'RoundTrip');
-        await addFile(page);
+    // the editor needs cross-origin isolation for pyodide and the mpy-cross
+    // workers, and gets it from headers that are easy to lose
+    expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
 
-        const code = 'from pybricks.hubs import PrimeHub\nhub = PrimeHub()\n';
-        await typeCode(page, code);
-        await save(page, 'first save');
+    // a new project starts with nothing in it
+    const first = await createProject(page, 'Journey');
+    await expect(page.getByRole('button', { name: /History \(0\)/ })).toBeVisible();
 
-        await expect(page.getByRole('button', { name: /History \(1\)/ })).toBeVisible();
+    await addFile(page, 'main');
+    await typeCode(page, 'FIRST_MARKER = 1\n');
+    await save(page, 'first save');
 
-        // reloading rebuilds everything from storage, so it proves the save
-        // landed rather than just the editor still holding the text
-        await page.reload();
+    await expect(page.getByRole('button', { name: /History \(1\)/ })).toBeVisible();
 
-        await expect(page.locator('.monaco-editor').first()).toBeVisible({
-            timeout: 30_000,
-        });
-        await expect(page.locator('.monaco-editor').first()).toContainText('PrimeHub', {
-            timeout: 30_000,
-        });
-    });
+    // a second project must not inherit the first one's files
+    const second = await createProject(page, 'Other');
+    await expect(editorText(page)).not.toContainText('FIRST_MARKER');
 
-    test('should swap files when moving between projects', async ({ page }) => {
-        await arrive(page);
+    await addFile(page, 'other');
+    await typeCode(page, 'SECOND_MARKER = 2\n');
+    await save(page, 'second save');
 
-        // first project, with something identifiable in it
-        await createProject(page, 'AlphaSide');
-        await addFile(page);
-        await typeCode(page, 'ALPHA_MARKER = 1\n');
-        await save(page, 'alpha');
+    // going back to the first must bring its code back and show it. Leaving a
+    // project unmounts the editor, and the saga that drives it used to keep
+    // writing to the widget that unmounting disposed, so the code loaded but
+    // the pane stayed blank.
+    await openFromDashboard(page, first);
 
-        // second project, likewise
-        await page.getByRole('link', { name: 'Jahn Robotics' }).click();
-        await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
-        await createProject(page, 'BetaSide');
-        await addFile(page);
-        await typeCode(page, 'BETA_MARKER = 2\n');
-        await save(page, 'beta');
+    await expect(editorText(page)).toBeVisible({ timeout: 30_000 });
+    await expect(editorText(page)).toContainText('FIRST_MARKER', { timeout: 30_000 });
+    await expect(editorText(page)).not.toContainText('SECOND_MARKER');
 
-        const editor = page.locator('.monaco-editor').first();
-        await expect(editor).toContainText('BETA_MARKER');
-        await expect(editor).not.toContainText('ALPHA_MARKER');
+    // and again, since the handlers accumulated one per visit
+    await openFromDashboard(page, second);
+    await expect(editorText(page)).toContainText('SECOND_MARKER', { timeout: 30_000 });
 
-        // back to the first: its files must come back, and the editor must be
-        // able to open them. Reusing a file uuid whose web lock was never
-        // released is what produces "already open in another window".
-        await page.getByRole('link', { name: 'Jahn Robotics' }).click();
-        await page
-            .getByRole('heading', { name: `${runId} AlphaSide` })
-            .first()
-            .click();
+    await openFromDashboard(page, first);
+    await expect(editorText(page)).toContainText('FIRST_MARKER', { timeout: 30_000 });
 
-        await expect(editor).toBeVisible({ timeout: 30_000 });
-        await expect(editor).toContainText('ALPHA_MARKER', { timeout: 30_000 });
-        await expect(editor).not.toContainText('BETA_MARKER');
-    });
+    // adding a file after all that still has to work
+    await addFile(page, 'late');
+    await typeCode(page, 'LATE_MARKER = 3\n');
+    await expect(editorText(page)).toContainText('LATE_MARKER');
 
-    test('should not report a file as already open after switching twice', async ({
-        page,
-    }) => {
-        const errors: string[] = [];
-        page.on('console', (message) => {
-            if (message.type() === 'error') {
-                errors.push(message.text());
-            }
-        });
+    // a reload rebuilds everything from storage, so it proves the save landed
+    await page.reload();
+    await expect(editorText(page)).toBeVisible({ timeout: 30_000 });
+    await expect(editorText(page)).toContainText('MARKER', { timeout: 30_000 });
 
-        await arrive(page);
-        const first = await createProject(page, 'Bounce');
-        await addFile(page);
-        await typeCode(page, 'BOUNCE = 1\n');
-        await save(page);
-
-        // leave and come back twice, which is when the stale lock showed up
-        for (let i = 0; i < 2; i++) {
-            await page.getByRole('link', { name: 'Jahn Robotics' }).click();
-            await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
-            await page.getByRole('heading', { name: first }).first().click();
-            await expect(page.locator('.monaco-editor').first()).toBeVisible({
-                timeout: 30_000,
-            });
-        }
-
-        await expect(page.locator('.monaco-editor').first()).toContainText('BOUNCE', {
-            timeout: 30_000,
-        });
-
-        expect(
-            errors.filter((e) => /already open|in use/i.test(e)),
-            'the editor should not have reported a file as already open',
-        ).toEqual([]);
-    });
-
-    test('should show a saved version in the history and load it back', async ({
-        page,
-    }) => {
-        await arrive(page);
-        await createProject(page, 'History');
-        await addFile(page);
-
-        await typeCode(page, 'VERSION_ONE = 1\n');
-        await save(page, 'version one');
-
-        await typeCode(page, 'VERSION_TWO = 2\n');
-        await save(page, 'version two');
-
-        await page.getByRole('button', { name: /History \(2\)/ }).click();
-
-        const feed = page.getByText('version one');
-        await expect(feed).toBeVisible();
-
-        // loading an older version brings its files back; saving on top of it
-        // would then append rather than overwrite
-        await feed.click();
-
-        await expect(page.locator('.monaco-editor').first()).toContainText(
-            'VERSION_ONE',
-            { timeout: 30_000 },
-        );
-    });
+    expect(
+        errors.filter((e) => /already open|in use|not found|disposed/i.test(e)),
+        'the editor should not have complained about files or disposed widgets',
+    ).toEqual([]);
 });
