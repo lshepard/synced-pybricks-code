@@ -92,43 +92,6 @@ describe('ActiveFileHistoryManager', () => {
             sessionStorage.getItem(`editor.activeFileHistory.${window.name}.test`),
         ).toEqual(`["${oneFileUuid}","${twoFileUuid}"]`);
     });
-
-    describe('clear', () => {
-        it('should leave nothing to fall back to', () => {
-            // popping a file normally hands back the previous one so that
-            // something stays active. When the whole file set is being
-            // replaced that reopens files that are about to be deleted, so
-            // clearing first has to make pop find nothing.
-            const manager = new ActiveFileHistoryManager('test');
-
-            manager.push(oneFileUuid);
-            manager.push(twoFileUuid);
-
-            manager.clear();
-
-            expect(manager.pop(twoFileUuid)).toBe(undefined);
-            expect(manager.pop(oneFileUuid)).toBe(undefined);
-        });
-
-        it('should not be restored on the next page load', () => {
-            const manager = new ActiveFileHistoryManager('test');
-
-            manager.push(oneFileUuid);
-            manager.clear();
-
-            // a fresh manager reads what is in storage, which is how a stale
-            // file from a previous project came back after a reload
-            expect([...new ActiveFileHistoryManager('test').getFromStorage()]).toEqual(
-                [],
-            );
-        });
-
-        it('should be safe when there is no history', () => {
-            const manager = new ActiveFileHistoryManager('test');
-
-            expect(() => manager.clear()).not.toThrow();
-        });
-    });
 });
 
 describe('OpenFileManager', () => {

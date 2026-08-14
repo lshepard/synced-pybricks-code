@@ -126,26 +126,6 @@ export class ActiveFileHistoryManager {
 
         return wasActiveFile ? this.history.at(-1) : undefined;
     }
-
-    /**
-     * Forgets every file in the history.
-     *
-     * Closing files one at a time makes {@link pop} hand back the previous
-     * file so that something stays active, which is right for a person closing
-     * a tab but wrong when the whole file set is being replaced: the editor
-     * reopens files that are about to stop existing. Clearing first means
-     * there is nothing to fall back to.
-     */
-    public clear(): void {
-        this.history.length = 0;
-
-        try {
-            sessionStorage.removeItem(this.storageKey);
-        } catch (err) {
-            // istanbul ignore next: not a critical failure
-            console.error(`failed to clear ${this.storageKey}: ${err}`);
-        }
-    }
 }
 
 export type OpenFileInfo = {

@@ -17,7 +17,6 @@ import {
     takeEvery,
 } from 'typed-redux-saga/macro';
 import { alertsShowAlert } from '../alerts/actions';
-import { markEdited } from '../cloud/identity';
 import { FileStorageDb, UUID } from '../fileStorage';
 import {
     fileStorageDidFailToLoadTextFile,
@@ -49,13 +48,11 @@ import { acquireLock, defined, ensureError } from '../utils';
 import { createCountFunc } from '../utils/iter';
 import {
     editorActivateFile,
-    editorCloseAllFiles,
     editorCloseFile,
     editorCompletionDidFailToInit,
     editorCompletionDidInit,
     editorCompletionInit,
     editorDidActivateFile,
-    editorDidCloseAllFiles,
     editorDidCloseFile,
     editorDidCreate,
     editorDidFailToActivateFile,
@@ -90,10 +87,6 @@ function* handleModelDidChange(
         // when the model changes, save it to storage.
         yield* put(fileStorageStoreTextFileValue(model.uri.path as UUID, value));
         // failures are ignored
-
-        // record that local files are ahead of the last cloud save, so that
-        // leaving the project can warn instead of silently discarding work
-        yield* call(markEdited);
 
         // throttle the writes so we don't do it too often while user is typing quickly
         yield* delay(ms);
@@ -169,16 +162,6 @@ function* handleEditorOpenFile(
             }
 
             defined(didLoad);
-
-            // createModel throws if one already exists for this uri. That can
-            // happen when a file is closed and another is opened with the same
-            // uuid before the first model finished disposing, which would
-            // otherwise leave an open tab with no editor behind it.
-            const existing = monaco.editor.getModel(modelUri);
-
-            if (existing) {
-                existing.dispose();
-            }
 
             const model = monaco.editor.createModel(
                 didLoad.value,
@@ -345,30 +328,6 @@ function* handleEditorGoto(
     });
 }
 
-/**
- * Closes every open file, without reopening any of them.
- *
- * Used when the whole file set is being replaced. The history is cleared
- * first, so that the pop in {@link handleEditorDidCloseFile} finds nothing and
- * does not activate a file that is about to be deleted. Waiting for each close
- * to complete matters too: a file's lock and its monaco model are released as
- * part of closing, and reusing that file's uuid before then fails.
- */
-function* handleEditorCloseAllFiles(
-    activeFileHistory: ActiveFileHistoryManager,
-): Generator {
-    activeFileHistory.clear();
-
-    const openUuids = yield* select((s: RootState) => s.editor.openFileUuids);
-
-    for (const uuid of openUuids) {
-        yield* put(editorCloseFile(uuid));
-        yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
-    }
-
-    yield* put(editorDidCloseAllFiles());
-}
-
 function* handleEditorDidCloseFile(
     activeFileHistory: ActiveFileHistoryManager,
     action: ReturnType<typeof editorDidCloseFile>,
@@ -462,7 +421,6 @@ function* handleDidCreateEditor(editor: monaco.editor.ICodeEditor): Generator {
     );
     yield* takeEvery(editorGoto, handleEditorGoto, editor);
     yield* takeEvery(editorDidCloseFile, handleEditorDidCloseFile, activeFileHistory);
-    yield* takeEvery(editorCloseAllFiles, handleEditorCloseAllFiles, activeFileHistory);
     yield* fork(monitorViewState, editor);
 
     yield* put(editorDidCreate());
@@ -470,19 +428,7 @@ function* handleDidCreateEditor(editor: monaco.editor.ICodeEditor): Generator {
     // this should restore all previously open files in the same order
     // the were last used (which may be different from the order in which
     // they were originally opened)
-    const db = yield* getContext<FileStorageDb>('fileStorage');
-
     for (const item of activeFileHistory.getFromStorage()) {
-        // The history can name files that no longer exist: loading a cloud
-        // project replaces the whole file set, and the replacements get new
-        // uuids. Asking for a missing one throws where it cannot be caught
-        // usefully, so check before asking.
-        const stillExists = yield* call(() => db.metadata.get(item));
-
-        if (!stillExists) {
-            continue;
-        }
-
         yield* put(editorActivateFile(item));
 
         yield* race({

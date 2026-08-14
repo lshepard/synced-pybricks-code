@@ -13,8 +13,8 @@ import {
 import React, { useCallback, useState } from 'react';
 import * as api from './api';
 import { getName, getSessionId, markSaved } from './identity';
-import { readAllFiles } from './localFiles';
 import { maxNoteLength } from './protocol';
+import { useReadProjectFiles } from './useProjectFiles';
 
 type SaveButtonProps = {
     /** The project being edited. */
@@ -43,13 +43,14 @@ const SaveButton: React.FunctionComponent<SaveButtonProps> = ({
     const [note, setNote] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | undefined>();
+    const readProjectFiles = useReadProjectFiles();
 
     const save = useCallback(async () => {
         setBusy(true);
         setError(undefined);
 
         try {
-            const files = await readAllFiles();
+            const files = await readProjectFiles();
 
             if (Object.keys(files).length === 0) {
                 setError('There are no files to save.');
@@ -73,7 +74,7 @@ const SaveButton: React.FunctionComponent<SaveButtonProps> = ({
             setError(err instanceof Error ? err.message : 'Could not save.');
             setBusy(false);
         }
-    }, [slug, note, onSaved]);
+    }, [slug, note, onSaved, readProjectFiles]);
 
     return (
         <>

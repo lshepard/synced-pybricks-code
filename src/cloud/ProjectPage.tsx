@@ -19,9 +19,8 @@ import {
     markSaved,
     setCurrentProject,
 } from './identity';
-import { readAllFiles } from './localFiles';
 import { Lock, ProjectInfo, VersionInfo } from './protocol';
-import { useReplaceProjectFiles } from './useProjectFiles';
+import { useReadProjectFiles, useReplaceProjectFiles } from './useProjectFiles';
 
 function when(iso: string): string {
     return new Date(iso).toLocaleString(undefined, {
@@ -46,6 +45,7 @@ const ProjectPage: React.FunctionComponent = () => {
     const { slug = '' } = useParams();
     const navigate = useNavigate();
     const replaceProjectFiles = useReplaceProjectFiles();
+    const readProjectFiles = useReadProjectFiles();
 
     const [phase, setPhase] = useState<Phase>('loading');
     const [project, setProject] = useState<ProjectInfo | undefined>();
@@ -303,7 +303,7 @@ const ProjectPage: React.FunctionComponent = () => {
                                             // from, not to the project being
                                             // opened
                                             await api.saveVersion(pending, {
-                                                files: await readAllFiles(),
+                                                files: await readProjectFiles(),
                                                 author: getName() ?? 'Someone',
                                                 sessionId: getSessionId(),
                                             });

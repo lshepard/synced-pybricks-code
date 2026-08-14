@@ -7,6 +7,7 @@ import alerts, { AlertsSagaContext } from './alerts/sagas';
 import app from './app/sagas';
 import ble from './ble/sagas';
 import blePybricksService from './ble-pybricks-service/sagas';
+import cloud from './cloud/sagas';
 import errorLog from './error-log/sagas';
 import explorer from './explorer/sagas';
 import fileStorage, { FileStorageSageContext } from './fileStorage/sagas';
@@ -50,6 +51,7 @@ export default function* (): Generator {
         lwp3BootloaderProtocol(),
         errorLog(),
         explorer(),
+        cloud(),
         flashFirmware(),
         hub(),
         mpy(),

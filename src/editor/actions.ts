@@ -132,25 +132,3 @@ export const editorReplaceFile = createAction((uuid: UUID, value: string) => ({
     uuid,
     value,
 }));
-
-/**
- * Requests to close every open file and forget the active file history.
- *
- * Closing files one at a time activates the next file in the history so that
- * something stays open, which is right for a person closing a tab and wrong
- * when the whole file set is being replaced. This closes them as one
- * operation, leaving no file open and nothing to reactivate.
- */
-export const editorCloseAllFiles = createAction(() => ({
-    type: 'editor.action.closeAllFiles',
-}));
-
-/**
- * Indicates that {@link editorCloseAllFiles} completed.
- *
- * By the time this is sent, every editor model is disposed and every file lock
- * released, so the files can be removed from storage.
- */
-export const editorDidCloseAllFiles = createAction(() => ({
-    type: 'editor.action.didCloseAllFiles',
-}));
