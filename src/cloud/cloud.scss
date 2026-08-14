@@ -22,7 +22,11 @@ $header-height: 40px;
 // The page and the editor are siblings under the shell, stacked so the header
 // gets a row and the editor takes the rest. They are separate because the
 // editor outlives any one route; see AppShell.
-#root {
+//
+// react-aria's OverlayProvider puts a plain block div between #root and this
+// content, so the column has to be declared on that div rather than on #root,
+// or nothing below it is a flex child and the sizes come out wrong.
+#root > [data-overlay-container] {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -39,16 +43,19 @@ $header-height: 40px;
     min-height: 0;
 }
 
-// Holds the editor for the whole session. Monaco measures its container to
-// decide how much to draw, so this has to have a real height: as a bare flex
-// child it collapsed to a few pixels and the editor rendered one line.
+// Holds the editor for the whole session.
+//
+// flex: 1 1 auto is what gives it the space left after the header, and
+// min-height: 0 is what lets it shrink rather than overflow. Adding
+// height: 100% here as well makes it as tall as the whole window, pushing it
+// past the bottom by the height of the header and leaving the page scrollable.
 .pb-cloud-editor-host {
     position: relative;
     flex: 1 1 auto;
     min-height: 0;
-    // belt and braces, since monaco reads the computed height
-    height: 100%;
+    overflow: hidden;
 
+    // the editor's own root is height: 100%, measured against this
     > .pb-app {
         height: 100%;
     }
