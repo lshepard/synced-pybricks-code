@@ -17,7 +17,6 @@ import RestoreOfficialDialog from '../firmware/restoreOfficialDialog/RestoreOffi
 import SponsorDialog from '../sponsor/SponsorDialog';
 import StatusBar from '../status-bar/StatusBar';
 import Toolbar from '../toolbar/Toolbar';
-import Tour from '../tour/Tour';
 import { docsDefaultPage } from './constants';
 import { useI18n } from './i18n';
 
@@ -181,7 +180,12 @@ const App: React.FunctionComponent = () => {
                 </div>
             </div>
             <StatusBar />
-            <Tour />
+            {/*
+             * The welcome tour is not rendered. It opens over the editor on a
+             * first visit, leaves a beacon on screen afterwards, and switches
+             * the sidebar to Settings when it runs. This build is handed to a
+             * team who have been shown what it is, so it is only in the way.
+             */}
             <DfuWindowsDriverInstallDialog />
             <InstallPybricksDialog />
             <RestoreOfficialDialog />
