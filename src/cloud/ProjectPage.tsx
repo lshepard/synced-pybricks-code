@@ -4,10 +4,8 @@
 import './cloud.scss';
 import { Button, Dialog, DialogBody, DialogFooter, Spinner } from '@blueprintjs/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useDispatch } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom';
 import App from '../app/App';
-import { editorActivateFile } from '../editor/actions';
 import CloudHeader from './CloudHeader';
 import NameGate from './NameGate';
 import SaveButton from './SaveButton';
@@ -21,8 +19,9 @@ import {
     markSaved,
     setCurrentProject,
 } from './identity';
-import { firstFileUuid, replaceAllFiles } from './localFiles';
+import { readAllFiles } from './localFiles';
 import { Lock, ProjectInfo, VersionInfo } from './protocol';
+import { useReplaceProjectFiles } from './useProjectFiles';
 
 function when(iso: string): string {
     return new Date(iso).toLocaleString(undefined, {
@@ -46,7 +45,7 @@ type Phase = 'loading' | 'confirmSwitch' | 'ready' | 'failed';
 const ProjectPage: React.FunctionComponent = () => {
     const { slug = '' } = useParams();
     const navigate = useNavigate();
-    const dispatch = useDispatch();
+    const replaceProjectFiles = useReplaceProjectFiles();
 
     const [phase, setPhase] = useState<Phase>('loading');
     const [project, setProject] = useState<ProjectInfo | undefined>();
@@ -57,6 +56,11 @@ const ProjectPage: React.FunctionComponent = () => {
     const [who, setWho] = useState(getName());
     const [askName, setAskName] = useState(getName() === undefined);
     const [showFeed, setShowFeed] = useState(false);
+
+    // which project the unsaved local files belong to, while asking about them
+    const [pending, setPending] = useState<string | undefined>();
+    const [savingPending, setSavingPending] = useState(false);
+    const [saveError, setSaveError] = useState<string | undefined>();
 
     // guards against loading the project twice under React strict mode
     const loadedFor = useRef<string | undefined>(undefined);
@@ -69,23 +73,42 @@ const ProjectPage: React.FunctionComponent = () => {
 
             const target = versionId ?? list[0]?.id;
 
-            if (target !== undefined) {
-                const snapshot = await api.fetchVersion(slug, target);
-                await replaceAllFiles(snapshot.files);
-            }
+            // A project with nothing saved yet starts empty; the explorer's +
+            // button is how a first file gets made. What matters is that it
+            // does not inherit whatever the last project left behind.
+            const files =
+                target === undefined
+                    ? {}
+                    : (await api.fetchVersion(slug, target)).files;
+
+            await replaceProjectFiles(files);
 
             setCurrentProject(slug);
             markSaved();
             setDirty(false);
-
-            const uuid = await firstFileUuid();
-
-            if (uuid) {
-                dispatch(editorActivateFile(uuid));
-            }
         },
-        [slug, dispatch],
+        [slug, replaceProjectFiles],
     );
+
+    /** Takes the lock, tolerating someone else already holding it. */
+    const takeLock = useCallback(async () => {
+        try {
+            setLock(
+                await api.acquireLock(slug, getName() ?? 'Someone', getSessionId()),
+            );
+        } catch {
+            // someone else is editing; the banner explains and saving is off
+            setLock(undefined);
+        }
+    }, [slug]);
+
+    /** Loads the project, replacing whatever the editor currently holds. */
+    const proceedWithLoad = useCallback(async () => {
+        setPhase('loading');
+        await loadVersion();
+        await takeLock();
+        setPhase('ready');
+    }, [loadVersion, takeLock]);
 
     const open = useCallback(async () => {
         try {
@@ -102,36 +125,26 @@ const ProjectPage: React.FunctionComponent = () => {
 
             const current = getCurrentProject();
 
-            // switching away from unsaved work needs a decision first
-            if (current && current !== slug && isDirty()) {
+            // Unsaved work is the only reason not to load: replacing the files
+            // would throw it away. Ask first, whichever project it belongs to.
+            if (current && isDirty()) {
+                setPending(current);
                 setPhase('confirmSwitch');
                 return;
             }
 
-            // reopening the same project keeps whatever is in the editor,
-            // which may be newer than the last save
-            if (current !== slug) {
-                await loadVersion();
-            } else {
-                setVersions(await api.fetchVersions(slug));
-                setDirty(isDirty());
-            }
-
-            try {
-                setLock(
-                    await api.acquireLock(slug, getName() ?? 'Someone', getSessionId()),
-                );
-            } catch {
-                // someone else is editing; the banner explains and saving is off
-                setLock(undefined);
-            }
+            // Otherwise always load, which clears whatever the last project
+            // left behind. Local files are only ever a copy of a saved
+            // version, so there is nothing to lose by replacing them.
+            await loadVersion();
+            await takeLock();
 
             setPhase('ready');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not open that.');
             setPhase('failed');
         }
-    }, [slug, loadVersion]);
+    }, [slug, loadVersion, takeLock]);
 
     useEffect(() => {
         if (askName || loadedFor.current === slug) {
@@ -192,7 +205,7 @@ const ProjectPage: React.FunctionComponent = () => {
     }
 
     return (
-        <>
+        <div className="pb-cloud-page">
             <CloudHeader
                 projectName={project?.name}
                 who={who}
@@ -263,33 +276,56 @@ const ProjectPage: React.FunctionComponent = () => {
             >
                 <DialogBody>
                     <p>
-                        The editor has changes from another project that were never
-                        saved. Opening this project will replace them.
+                        The editor has changes that were never saved
+                        {pending && pending !== slug ? (
+                            <>
+                                , from <strong>{pending}</strong>
+                            </>
+                        ) : null}
+                        . Opening this project will replace them.
                     </p>
+                    {saveError && <div className="pb-cloud-error">{saveError}</div>}
                 </DialogBody>
                 <DialogFooter
                     actions={
                         <>
                             <Button text="Go back" onClick={() => navigate('/')} />
+                            {pending && (
+                                <Button
+                                    text="Save them first"
+                                    loading={savingPending}
+                                    onClick={async () => {
+                                        setSavingPending(true);
+                                        setSaveError(undefined);
+
+                                        try {
+                                            // save to wherever the files came
+                                            // from, not to the project being
+                                            // opened
+                                            await api.saveVersion(pending, {
+                                                files: await readAllFiles(),
+                                                author: getName() ?? 'Someone',
+                                                sessionId: getSessionId(),
+                                            });
+                                            markSaved();
+                                            setSavingPending(false);
+                                            await proceedWithLoad();
+                                        } catch (err) {
+                                            setSaveError(
+                                                err instanceof Error
+                                                    ? err.message
+                                                    : 'Could not save those changes.',
+                                            );
+                                            setSavingPending(false);
+                                        }
+                                    }}
+                                />
+                            )}
                             <Button
                                 intent="danger"
-                                text="Replace them"
-                                onClick={async () => {
-                                    setPhase('loading');
-                                    await loadVersion();
-                                    try {
-                                        setLock(
-                                            await api.acquireLock(
-                                                slug,
-                                                getName() ?? 'Someone',
-                                                getSessionId(),
-                                            ),
-                                        );
-                                    } catch {
-                                        setLock(undefined);
-                                    }
-                                    setPhase('ready');
-                                }}
+                                text="Discard them"
+                                disabled={savingPending}
+                                onClick={proceedWithLoad}
                             />
                         </>
                     }
@@ -332,7 +368,7 @@ const ProjectPage: React.FunctionComponent = () => {
                     )}
                 </DialogBody>
             </Dialog>
-        </>
+        </div>
     );
 };
 

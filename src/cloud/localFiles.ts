@@ -39,7 +39,12 @@ export async function readAllFiles(): Promise<Record<string, string>> {
  * Done in one transaction so a failure cannot leave a mix of two projects'
  * files, which would then be saved back to the cloud as if it were one.
  *
- * @param files Maps file path to contents.
+ * Callers must close any open editors first. The editor holds a web lock
+ * named for the file's uuid until it closes the file, and uuids are handed
+ * out by the database, so a replacement can be given a uuid whose lock is
+ * still held. Reopening then fails with "already open in another window".
+ *
+ * @param files Maps file path to contents. Pass an empty object to clear.
  */
 export async function replaceAllFiles(files: Record<string, string>): Promise<void> {
     const entries = Object.entries(files);

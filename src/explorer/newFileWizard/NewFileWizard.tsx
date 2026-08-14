@@ -15,8 +15,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { useId } from 'react-aria';
 import { useDispatch } from 'react-redux';
 import { useLocalStorage } from 'usehooks-ts';
-import { HubPicker } from '../../components/hubPicker/HubPicker';
-import { useHubPickerSelectedHub } from '../../components/hubPicker/hooks';
+import { Hub } from '../../components/hubPicker';
 import { useFileStorageMetadata } from '../../fileStorage/hooks';
 import {
     FileNameValidationResult,
@@ -45,7 +44,9 @@ const NewFileWizard: React.FunctionComponent = () => {
         files.map((f) => f.path),
     );
 
-    const [hubType] = useHubPickerSelectedHub();
+    // This build is for one team, and that team uses SPIKE Prime, so the hub
+    // is fixed rather than asked about every time a file is made.
+    const hubType = Hub.Prime;
     const fileNameInputRef = useRef<HTMLInputElement>(null);
 
     const handleSubmit = useCallback<React.FormEventHandler>(
@@ -106,8 +107,6 @@ const NewFileWizard: React.FunctionComponent = () => {
                                       )}
                             </Text>
                         </ControlGroup>
-                        <div className="pb-spacer" />
-                        <HubPicker disabled={!useTemplate} />
                     </FormGroup>
                 </div>
                 <div className={Classes.DIALOG_FOOTER}>

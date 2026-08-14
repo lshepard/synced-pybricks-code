@@ -19,6 +19,24 @@ $orange: #ff6b2b;
 
 $header-height: 40px;
 
+// The editor's root is height: 100%, so it fills whatever it is given and
+// would push the header off screen. This column gives the header its own row
+// and hands the rest to the editor.
+.pb-cloud-page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+
+    // the editor root, which must shrink to what is left rather than
+    // insisting on the full height
+    > .pb-app {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+    }
+}
+
 .pb-cloud-header {
     display: flex;
     align-items: center;
