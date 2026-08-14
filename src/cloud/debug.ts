@@ -32,10 +32,16 @@ export const debugMiddleware: Middleware = () => (next) => (action) => {
     ) {
         try {
             if (localStorage.getItem('cloud.debug') === '1') {
+                // Recorded rather than printed. Reading it back is what the
+                // diagnostic test needs, and printing every action buries the
+                // console output that matters when something goes wrong.
                 window.__cloudLog ??= [];
                 window.__cloudLog.push({ at: Date.now(), type: typed.type });
-                // eslint-disable-next-line no-console
-                console.debug('action', typed.type);
+
+                // keep it from growing without bound in a long session
+                if (window.__cloudLog.length > 500) {
+                    window.__cloudLog.splice(0, window.__cloudLog.length - 500);
+                }
             }
         } catch {
             // storage can throw in a locked down browser; logging is optional
