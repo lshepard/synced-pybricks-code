@@ -1,0 +1,5 @@
+# The api/*.ts sources are bundled into .mjs by scripts/build-api.js, which
+# runs as part of `yarn build`. Uploading the TypeScript as well would have
+# Vercel build a second, broken function for every route: it compiles each api
+# file on its own and does not follow the imports into src/.
+api/**/*.ts
