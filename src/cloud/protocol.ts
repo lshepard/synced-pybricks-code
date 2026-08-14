@@ -3,9 +3,9 @@
 
 // Data types and pure logic shared between the cloud API and the browser.
 //
-// Everything in this file is free of I/O so that it can be unit tested and
-// used from both the serverless functions and the front end without pulling
-// in a storage backend.
+// Anything that a database can express directly belongs in SQL rather than
+// here. This file is limited to shapes and to string handling that has to
+// match on both sides of the wire.
 
 /** How long a lock is honored before it is considered abandoned. */
 export const lockTtlMs = 20 * 60 * 1000;
@@ -19,9 +19,9 @@ export const maxNoteLength = 280;
 /** Maximum length of a user's display name. */
 export const maxAuthorLength = 40;
 
-/** An entry in the project manifest. */
+/** A project as shown in the dashboard. */
 export type ProjectInfo = Readonly<{
-    /** URL- and path-safe unique identifier derived from the name. */
+    /** URL-safe unique identifier derived from the name. */
     slug: string;
     /** The name as typed by the user. */
     name: string;
@@ -33,10 +33,10 @@ export type ProjectInfo = Readonly<{
     archived: boolean;
 }>;
 
-/** An entry in a project's version index. */
+/** An entry in a project's version feed. */
 export type VersionInfo = Readonly<{
-    /** Unique identifier for the version, also its sort key. */
-    id: string;
+    /** Unique identifier for the version. */
+    id: number;
     /** ISO 8601 timestamp of when the version was saved. */
     savedAt: string;
     /** The name of whoever saved it. */
@@ -63,10 +63,13 @@ export type Lock = Readonly<{
 }>;
 
 /**
- * Converts a user-supplied project name to a path-safe slug.
+ * Converts a user-supplied project name to a URL-safe slug.
  *
- * Blob keys end up in URLs, so the result is restricted to lowercase
+ * Slugs appear in URLs, so the result is restricted to lowercase
  * alphanumerics and single dashes.
+ *
+ * Uniqueness is not handled here. The database owns that, via a unique
+ * constraint, because only it can decide it without a race.
  *
  * @param name The name as typed by the user.
  * @returns The slug, or an empty string if the name has no usable characters.
@@ -84,81 +87,4 @@ export function slugify(name: string): string {
             // slicing can leave a trailing dash
             .replace(/-+$/g, '')
     );
-}
-
-/**
- * Picks a slug that is not already used by an existing project.
- *
- * Archived projects still occupy their slug, since they remain readable and
- * can be unarchived at any time.
- *
- * @param name The name as typed by the user.
- * @param existing The slugs already in the manifest.
- * @returns A slug that is not in `existing`.
- */
-export function uniqueSlug(name: string, existing: readonly string[]): string {
-    const base = slugify(name) || 'project';
-    const taken = new Set(existing);
-
-    if (!taken.has(base)) {
-        return base;
-    }
-
-    for (let i = 2; ; i++) {
-        const candidate = `${base}-${i}`;
-        if (!taken.has(candidate)) {
-            return candidate;
-        }
-    }
-}
-
-/**
- * Tests whether a lock may be taken by someone else.
- *
- * A lock is stale once it has not been refreshed within {@link lockTtlMs},
- * which covers the common case of a browser being closed without releasing it.
- *
- * @param lock The current lock, or undefined if there is none.
- * @param now The current time in milliseconds since the epoch.
- * @returns True if the lock is absent or expired.
- */
-export function isLockStale(lock: Lock | undefined, now: number): boolean {
-    if (!lock) {
-        return true;
-    }
-
-    const since = Date.parse(lock.since);
-
-    // a lock with an unparsable timestamp can't be trusted to ever expire
-    if (Number.isNaN(since)) {
-        return true;
-    }
-
-    return now - since >= lockTtlMs;
-}
-
-/**
- * Tests whether a session is allowed to save to a project.
- *
- * @param lock The current lock, or undefined if there is none.
- * @param sessionId The session asking to save.
- * @param now The current time in milliseconds since the epoch.
- * @returns True if the session holds the lock or the lock is stale.
- */
-export function canSave(
-    lock: Lock | undefined,
-    sessionId: string,
-    now: number,
-): boolean {
-    return isLockStale(lock, now) || lock?.sessionId === sessionId;
-}
-
-/**
- * Sorts version index entries newest first.
- *
- * @param versions The entries to sort.
- * @returns A new sorted array.
- */
-export function sortVersions(versions: readonly VersionInfo[]): VersionInfo[] {
-    return [...versions].sort((a, b) => b.id.localeCompare(a.id));
 }
