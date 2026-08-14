@@ -38,9 +38,15 @@ async function arrive(page: Page): Promise<void> {
     await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
 }
 
-/** Creates a project and waits for its page. */
+/** Creates a project and waits for its page, from wherever the test is. */
 async function createProject(page: Page, label: string): Promise<string> {
     const name = `${runId} ${label}`;
+
+    // the button lives on the dashboard, so get there first
+    if (!page.url().endsWith('/')) {
+        await page.getByRole('link', { name: 'Jahn Robotics' }).click();
+        await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+    }
 
     await page.getByRole('button', { name: 'New project' }).click();
 

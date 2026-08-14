@@ -15,6 +15,7 @@
 
 import {
     call,
+    delay,
     getContext,
     put,
     race,
@@ -96,7 +97,16 @@ function* deleteFile(path: string, uuid: string): Generator {
     // editor has to let go of it first
     if (openUuids.includes(uuid as never)) {
         yield* put(editorCloseFile(uuid as never));
-        yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
+
+        // The editor confirms a close from the task that opened the file, and
+        // that task ends with the editor widget. Navigating between projects
+        // replaces the widget, so a file opened by the previous one is never
+        // confirmed and waiting alone would hang. The delete below is the real
+        // check: it fails if the file is still held.
+        yield* race({
+            closed: take(editorDidCloseFile.when((a) => a.uuid === uuid)),
+            timeout: delay(2000),
+        });
     }
 
     yield* put(fileStorageDeleteFile(path));
