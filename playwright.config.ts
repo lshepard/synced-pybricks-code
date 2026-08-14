@@ -15,8 +15,11 @@ const useLocalServer = !process.env.E2E_URL;
 // branch, so those are the ones to point at.
 //
 // Set E2E_ALLOW_PRODUCTION=1 to override, deliberately.
+// The bare project alias and the custom domain both resolve to whatever
+// deployment is production. Branch URLs (…-git-<branch>-…) are previews and
+// have their own database branch, so they are safe.
 const productionHosts = [
-    'synced-pybricks-code.vercel.app',
+    'https://synced-pybricks-code.vercel.app',
     'code.jahnrobotics.org',
 ];
 

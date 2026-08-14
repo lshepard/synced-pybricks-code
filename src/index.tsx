@@ -15,6 +15,7 @@ import createSagaMiddleware from 'redux-saga';
 import { appVersion } from './app/constants';
 import Dashboard from './cloud/Dashboard';
 import ProjectPage from './cloud/ProjectPage';
+import { closeAllFilesMiddleware } from './cloud/useProjectFiles';
 import { db } from './fileStorage/context';
 import { i18nManager } from './i18n';
 import { rootReducer } from './reducers';
@@ -44,6 +45,7 @@ const store = configureStore({
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({ serializableCheck })
             .concat(sagaMiddleware)
+            .concat(closeAllFilesMiddleware)
             .concat(loggerMiddleware),
 });
 

@@ -14,8 +14,10 @@ import {
 import { acquireLock } from '../utils';
 import {
     editorActivateFile,
+    editorCloseAllFiles,
     editorCloseFile,
     editorDidActivateFile,
+    editorDidCloseAllFiles,
     editorDidCloseFile,
     editorDidCreate,
     editorDidFailToActivateFile,
@@ -282,6 +284,62 @@ describe('per-editor sagas', () => {
             saga.put(editorDidCloseFile(testFileUuid));
 
             expect(ActiveFileHistoryManager.prototype.pop).toHaveBeenCalled();
+        });
+    });
+
+    describe('handleEditorCloseAllFiles', () => {
+        it('should forget the history before closing anything', async () => {
+            // Closing a file normally activates the next one in the history so
+            // that something stays open. When the whole file set is being
+            // replaced that reopens files that are about to be deleted, which
+            // left a tab for a file that no longer existed and made the editor
+            // report the file as already open elsewhere. Clearing first is
+            // what stops it.
+            saga.updateState({
+                editor: { openFileUuids: [testFileUuid, newTestFileUuid] },
+            });
+
+            saga.put(editorCloseAllFiles());
+
+            expect(ActiveFileHistoryManager.prototype.clear).toHaveBeenCalled();
+
+            await expect(saga.take()).resolves.toEqual(editorCloseFile(testFileUuid));
+        });
+
+        it('should wait for each file to finish closing', async () => {
+            // a file's lock and its monaco model are released as part of
+            // closing, and both are keyed by uuid, so the next file cannot be
+            // asked for until the previous one is done
+            saga.updateState({
+                editor: { openFileUuids: [testFileUuid, newTestFileUuid] },
+            });
+
+            saga.put(editorCloseAllFiles());
+
+            await expect(saga.take()).resolves.toEqual(editorCloseFile(testFileUuid));
+
+            // the second close must not be requested yet
+            saga.put(editorDidCloseFile(testFileUuid));
+
+            await expect(saga.take()).resolves.toEqual(
+                editorCloseFile(newTestFileUuid),
+            );
+
+            saga.put(editorDidCloseFile(newTestFileUuid));
+
+            await expect(saga.take()).resolves.toEqual(editorDidCloseAllFiles());
+        });
+
+        it('should report done when there was nothing open', async () => {
+            saga.updateState({ editor: { openFileUuids: [] } });
+
+            saga.put(editorCloseAllFiles());
+
+            // still clears, so a file left in session storage by a previous
+            // project is not restored
+            expect(ActiveFileHistoryManager.prototype.clear).toHaveBeenCalled();
+
+            await expect(saga.take()).resolves.toEqual(editorDidCloseAllFiles());
         });
     });
 

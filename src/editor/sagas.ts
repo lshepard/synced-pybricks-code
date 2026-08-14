@@ -49,11 +49,13 @@ import { acquireLock, defined, ensureError } from '../utils';
 import { createCountFunc } from '../utils/iter';
 import {
     editorActivateFile,
+    editorCloseAllFiles,
     editorCloseFile,
     editorCompletionDidFailToInit,
     editorCompletionDidInit,
     editorCompletionInit,
     editorDidActivateFile,
+    editorDidCloseAllFiles,
     editorDidCloseFile,
     editorDidCreate,
     editorDidFailToActivateFile,
@@ -343,6 +345,30 @@ function* handleEditorGoto(
     });
 }
 
+/**
+ * Closes every open file, without reopening any of them.
+ *
+ * Used when the whole file set is being replaced. The history is cleared
+ * first, so that the pop in {@link handleEditorDidCloseFile} finds nothing and
+ * does not activate a file that is about to be deleted. Waiting for each close
+ * to complete matters too: a file's lock and its monaco model are released as
+ * part of closing, and reusing that file's uuid before then fails.
+ */
+function* handleEditorCloseAllFiles(
+    activeFileHistory: ActiveFileHistoryManager,
+): Generator {
+    activeFileHistory.clear();
+
+    const openUuids = yield* select((s: RootState) => s.editor.openFileUuids);
+
+    for (const uuid of openUuids) {
+        yield* put(editorCloseFile(uuid));
+        yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
+    }
+
+    yield* put(editorDidCloseAllFiles());
+}
+
 function* handleEditorDidCloseFile(
     activeFileHistory: ActiveFileHistoryManager,
     action: ReturnType<typeof editorDidCloseFile>,
@@ -436,6 +462,7 @@ function* handleDidCreateEditor(editor: monaco.editor.ICodeEditor): Generator {
     );
     yield* takeEvery(editorGoto, handleEditorGoto, editor);
     yield* takeEvery(editorDidCloseFile, handleEditorDidCloseFile, activeFileHistory);
+    yield* takeEvery(editorCloseAllFiles, handleEditorCloseAllFiles, activeFileHistory);
     yield* fork(monitorViewState, editor);
 
     yield* put(editorDidCreate());
