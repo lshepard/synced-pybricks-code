@@ -121,6 +121,18 @@ test('creating a file, and reopening a project', async ({ page }) => {
 
     await report(page, 'after saving');
 
+    // third thing under test: does an empty second project clear the screen?
+    await page.getByRole('link', { name: 'Jahn Robotics' }).click();
+    await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+    await page.getByRole('button', { name: 'New project' }).click();
+    dialog = page.getByRole('dialog').filter({ hasText: 'New project' });
+    await dialog.getByPlaceholder('Line Follower').fill(`${runId} B`);
+    await dialog.getByRole('button', { name: 'Create' }).click();
+    await expect(page).toHaveURL(/\/project\//, { timeout: 30_000 });
+    await page.waitForTimeout(5000);
+
+    await report(page, 'after opening a second, empty project');
+
     // second thing under test: does reopening show the code again?
     await page.getByRole('link', { name: 'Jahn Robotics' }).click();
     await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();

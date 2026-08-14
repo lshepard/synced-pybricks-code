@@ -75,7 +75,20 @@ async function addFile(page: Page, name: string): Promise<void> {
 async function typeCode(page: Page, code: string): Promise<void> {
     await editorText(page).click();
     await page.keyboard.press('ControlOrMeta+A');
-    await page.keyboard.type(code);
+    await page.keyboard.press('Backspace');
+
+    // Typed slowly, and with the suggestion popup dismissed after each line.
+    // Code completion opens on the first letter of an identifier and eats the
+    // keystrokes that follow, which truncated the text to a single character.
+    for (const line of code.split('\n')) {
+        await page.keyboard.type(line, { delay: 30 });
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Enter');
+    }
+
+    await expect(editorText(page)).toContainText(code.split('\n')[0], {
+        timeout: 15_000,
+    });
 }
 
 /** Saves the project to the cloud. */
@@ -96,6 +109,12 @@ async function openFromDashboard(page: Page, name: string): Promise<void> {
 
     await page.getByRole('heading', { name }).first().click();
     await expect(page).toHaveURL(/\/project\//, { timeout: 30_000 });
+
+    // the project's own history count appearing means its load finished; the
+    // url changes before that, so asserting on content straight away races it
+    await expect(page.getByRole('button', { name: /History \(\d+\)/ })).toBeVisible({
+        timeout: 30_000,
+    });
 }
 
 test('a project can be made, saved, left and reopened', async ({ page }) => {
@@ -118,9 +137,13 @@ test('a project can be made, saved, left and reopened', async ({ page }) => {
 
     await expect(page.getByRole('button', { name: /History \(1\)/ })).toBeVisible();
 
-    // a second project must not inherit the first one's files
+    // A second project must not inherit the first one's files. It has none, so
+    // the editor should end up with nothing open at all: waiting for that is
+    // what says the swap finished. Checking the text instead races the
+    // teardown and catches the previous project's still on screen.
     const second = await createProject(page, 'Other');
-    await expect(editorText(page)).not.toContainText('FIRST_MARKER');
+    await expect(page.getByRole('button', { name: /History \(0\)/ })).toBeVisible();
+    await expect(page.locator('.monaco-editor')).toHaveCount(0, { timeout: 30_000 });
 
     await addFile(page, 'other');
     await typeCode(page, 'SECOND_MARKER = 2\n');
