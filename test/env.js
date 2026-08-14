@@ -18,12 +18,6 @@ module.exports = class CustomTestEnvironment extends JSDomEnvironment {
         // work around https://github.com/facebook/jest/issues/7780
         this.global.Uint8Array = Uint8Array;
         this.global.ArrayBuffer = ArrayBuffer;
-
-        // jsdom does not provide structuredClone, which IndexedDB needs to
-        // store values. Node has had it built in since 17.
-        if (this.global.structuredClone === undefined) {
-            this.global.structuredClone = structuredClone;
-        }
     }
 
     exportConditions() {
