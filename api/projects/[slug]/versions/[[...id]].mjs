@@ -172,7 +172,7 @@ function segments(request, after) {
   return pathname.slice(pathname.indexOf(after) + after.length).split("/").filter((s) => s !== "");
 }
 
-// src/cloud/routes/projects/[slug]/versions.ts
+// src/cloud/routes/projects/[slug]/versions/[[...id]].ts
 function target(request) {
   const parts = segments(request, "/api/projects/");
   const slug = parts[0] ?? "";

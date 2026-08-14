@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Luke Shepard
 
-import { addVersion, connect, getVersion, getVersions } from '../../../db';
-import { body, handle, json, requireString, segments } from '../../_lib';
+import { addVersion, connect, getVersion, getVersions } from '../../../../db';
+import { body, handle, json, requireString, segments } from '../../../_lib';
 
-/** Reads the slug, and an optional version id, from /api/projects/<slug>/versions[/<id>]. */
+// An optional catch-all so that one handler serves both the feed and a
+// single version. Vercel matches a request to a file, so versions.ts alone
+// would leave /versions/<id> with nothing to answer it.
+
+/** Reads the slug, and an optional version id, from the path. */
 function target(request: Request): { slug: string; id?: number } {
     const parts = segments(request, '/api/projects/');
     const slug = parts[0] ?? '';

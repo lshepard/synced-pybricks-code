@@ -10,7 +10,7 @@
 import { neon } from '@neondatabase/serverless';
 import * as archive from './projects/[slug]/archive';
 import * as lock from './projects/[slug]/lock';
-import * as versions from './projects/[slug]/versions';
+import * as versions from './projects/[slug]/versions/[[...id]]';
 import * as projects from './projects/index';
 
 const url = process.env.TEST_DATABASE_URL;
