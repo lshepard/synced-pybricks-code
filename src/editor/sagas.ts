@@ -17,6 +17,7 @@ import {
     takeEvery,
 } from 'typed-redux-saga/macro';
 import { alertsShowAlert } from '../alerts/actions';
+import { markEdited } from '../cloud/identity';
 import { FileStorageDb, UUID } from '../fileStorage';
 import {
     fileStorageDidFailToLoadTextFile,
@@ -87,6 +88,10 @@ function* handleModelDidChange(
         // when the model changes, save it to storage.
         yield* put(fileStorageStoreTextFileValue(model.uri.path as UUID, value));
         // failures are ignored
+
+        // record that local files are ahead of the last cloud save, so that
+        // leaving the project can warn instead of silently discarding work
+        yield* call(markEdited);
 
         // throttle the writes so we don't do it too often while user is typing quickly
         yield* delay(ms);

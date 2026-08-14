@@ -9,10 +9,12 @@ import React from 'react';
 import { OverlayProvider } from 'react-aria';
 import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';
+import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { createLogger } from 'redux-logger';
 import createSagaMiddleware from 'redux-saga';
-import App from './app/App';
 import { appVersion } from './app/constants';
+import Dashboard from './cloud/Dashboard';
+import ProjectPage from './cloud/ProjectPage';
 import { db } from './fileStorage/context';
 import { i18nManager } from './i18n';
 import { rootReducer } from './reducers';
@@ -77,12 +79,21 @@ const container = document.getElementById('root');
 defined(container);
 const root = createRoot(container);
 
+// The dashboard is the entry point, and the editor lives under a project, so
+// that a project can be linked to and reopened.
+const router = createBrowserRouter([
+    { path: '/', element: <Dashboard /> },
+    { path: '/project/:slug', element: <ProjectPage /> },
+    // anything else is a mistyped or stale link; the dashboard is the way back
+    { path: '*', element: <Dashboard /> },
+]);
+
 root.render(
     <Provider store={store}>
         <I18nContext.Provider value={i18nManager}>
             <OverlayProvider>
                 <HotkeysProvider>
-                    <App />
+                    <RouterProvider router={router} />
                 </HotkeysProvider>
             </OverlayProvider>
             <OverlayToaster ref={toasterRef} />
