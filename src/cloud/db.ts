@@ -10,7 +10,7 @@
 // clauses rather than as branching in JavaScript. That is also what makes them
 // atomic without holding a transaction open across the network.
 
-import { neon } from '@neondatabase/serverless';
+import { neon, neonConfig } from '@neondatabase/serverless';
 import {
     Lock,
     ProjectInfo,
@@ -22,6 +22,21 @@ import {
 
 /** A tagged-template SQL runner, as returned by {@link neon}. */
 export type Sql = ReturnType<typeof neon>;
+
+/** Hosts served by the local proxy rather than by Neon. */
+const localHosts = ['localhost', '127.0.0.1'];
+
+/** Port the local proxy listens on, matching docker-compose.yml. */
+const localProxyPort = 4444;
+
+// A local Postgres has no HTTPS endpoint of its own, so a connection string
+// pointing at one is sent to the proxy from docker-compose.yml instead, over
+// plain HTTP. Any other host keeps the driver's default of https on the host
+// itself.
+neonConfig.fetchEndpoint = (host, port) =>
+    localHosts.includes(host)
+        ? `http://${host}:${localProxyPort}/sql`
+        : `https://${host}:${port}/sql`;
 
 /** Reasons an operation can fail. */
 export type CloudErrorName = 'NotFound' | 'Locked' | 'Invalid';

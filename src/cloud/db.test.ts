@@ -9,8 +9,9 @@
 // These write to whatever TEST_DATABASE_URL points at, so they deliberately do
 // not fall back to DATABASE_URL: a Neon project has one database on its
 // default branch, which means the obvious variable is the live one. Point
-// TEST_DATABASE_URL at a separate Neon branch. Without it these are skipped,
-// so the suite still passes for anyone who has not set one up.
+// TEST_DATABASE_URL at the local database from docker-compose.yml, or at a
+// separate Neon branch. Without it these are skipped, so the suite still
+// passes for anyone who has not set one up.
 //
 // The node environment is required: the driver needs TextEncoder/TextDecoder,
 // which jsdom does not provide, and node is what the API actually runs on.
@@ -35,7 +36,8 @@ const url = process.env.TEST_DATABASE_URL;
 if (!url) {
     // eslint-disable-next-line no-console
     console.warn(
-        'TEST_DATABASE_URL is not set, skipping database tests. Set it to a ' +
+        'TEST_DATABASE_URL is not set, skipping database tests. Run ' +
+            '`docker compose up -d` and point it at the local database, or at a ' +
             'Neon branch created for testing; do not point it at the branch the ' +
             'app uses.',
     );
