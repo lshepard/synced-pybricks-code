@@ -86,6 +86,24 @@ The schema is applied when the volume is first created, so after editing
 `schema.sql` either re-apply it by hand or run `docker compose down -v` to
 start over.
 
+## Running the API on your machine
+
+`yarn start` serves the editor but not `/api`: those are Vercel functions. To
+run both, and so to run the browser tests without a deployment:
+
+```
+vercel dev --listen 3000
+```
+
+It runs `yarn start` behind it, per `devCommand` in `vercel.json`, because
+Vercel otherwise guesses `react-scripts start`, which this project does not
+have. The functions read `DATABASE_URL` from `.env.development.local`, which is
+gitignored, so point it at the local database:
+
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/main
+```
+
 ## Setting up the deployed database
 
 Neon, through the Vercel integration, which injects the connection strings
