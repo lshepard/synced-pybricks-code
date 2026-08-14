@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2026 The Pybricks Authors
+// Copyright (c) 2026 Luke Shepard
 
 import { BlobStore } from './store';
 
