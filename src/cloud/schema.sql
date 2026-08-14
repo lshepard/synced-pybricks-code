@@ -3,8 +3,9 @@
 
 -- Schema for the shared project store.
 --
--- Apply with:  psql "$DATABASE_URL" -f src/cloud/schema.sql
--- Safe to re-run.
+-- Apply with:  psql "$DATABASE_URL_UNPOOLED" -f src/cloud/schema.sql
+-- Use the unpooled URL: pgbouncer's transaction pooling cannot run DDL
+-- reliably. Safe to re-run.
 
 create table if not exists project (
     id          bigserial primary key,
@@ -18,7 +19,10 @@ create table if not exists project (
     archived    boolean     not null default false
 );
 
-create table if not exists version (
+-- One row per save: a snapshot of every file in the project at that moment.
+-- Append only. Saving while an older version is loaded adds a row rather than
+-- branching or overwriting, so history is always linear and nothing is lost.
+create table if not exists project_version (
     id         bigserial primary key,
     project_id bigint      not null references project (id),
     saved_at   timestamptz not null default now(),
@@ -30,12 +34,23 @@ create table if not exists version (
 );
 
 -- the feed reads newest first for one project
-create index if not exists version_project_saved_at_idx
-    on version (project_id, saved_at desc, id desc);
+create index if not exists project_version_feed_idx
+    on project_version (project_id, saved_at desc, id desc);
 
--- One row per project, present only while someone holds the lock.
--- Row absence means unlocked, which makes release a plain delete.
-create table if not exists edit_lock (
+-- Advisory "someone is editing this" state, held across many requests for as
+-- long as a person has the project open.
+--
+-- This is deliberately not a database lock. Row locks and pg_advisory_lock are
+-- scoped to a transaction or connection, so they end when the serverless
+-- function returns, and with pgbouncer in front the connection is handed to
+-- someone else anyway. What is needed here outlives every connection involved.
+-- Database locking still belongs in the save path, to serialize concurrent
+-- writes, but that is a separate concern from this table.
+--
+-- One row per project, present only while someone holds the lock. Row absence
+-- means unlocked, which makes release a plain delete and gives "unlocked"
+-- exactly one representation.
+create table if not exists project_edit_lock (
     project_id bigint      primary key references project (id),
     holder     text        not null check (length(trim(holder)) between 1 and 40),
     -- identifies a browser tab, so a lock taken over after a crash cannot be
