@@ -5,7 +5,6 @@ import './cloud.scss';
 import { Button, Dialog, DialogBody, DialogFooter, Spinner } from '@blueprintjs/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import App from '../app/App';
 import CloudHeader from './CloudHeader';
 import NameGate from './NameGate';
 import SaveButton from './SaveButton';
@@ -266,24 +265,11 @@ const ProjectPage: React.FunctionComponent = () => {
                 </div>
             )}
 
-            {/*
-             * The editor is mounted once and stays mounted. Unmounting it
-             * disposes the monaco widget, but the saga that drives the editor
-             * starts with the app and keeps a reference to whichever widget
-             * it saw first, so it goes on calling setModel on a disposed one.
-             * That is silent apart from a console warning: files load into
-             * storage and appear in the explorer, but nothing is ever drawn.
-             *
-             * So loading is shown over the editor rather than instead of it.
-             */}
-            <div className="pb-cloud-editor-host">
-                <App />
-                {phase === 'loading' && (
-                    <div className="pb-cloud-loading">
-                        <Spinner />
-                    </div>
-                )}
-            </div>
+            {phase === 'loading' && (
+                <div className="pb-cloud-loading">
+                    <Spinner />
+                </div>
+            )}
 
             <Dialog
                 isOpen={phase === 'confirmSwitch'}

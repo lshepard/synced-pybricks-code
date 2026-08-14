@@ -19,34 +19,44 @@ $orange: #ff6b2b;
 
 $header-height: 40px;
 
-// The editor's root is height: 100%, so it fills whatever it is given and
-// would push the header off screen. This column gives the header its own row
-// and hands the rest to the editor.
-.pb-cloud-page {
+// The page and the editor are siblings under the shell, stacked so the header
+// gets a row and the editor takes the rest. They are separate because the
+// editor outlives any one route; see AppShell.
+#root {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
 }
 
-// Holds the editor and, while a project is loading, a cover over it. The
-// editor stays mounted underneath: unmounting disposes the monaco widget that
-// the editor saga still holds a reference to.
+// Header and any overlays for the current project. Takes only the height its
+// content needs, so that everything left over goes to the editor.
+.pb-cloud-page {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    // dialogs render in portals, so nothing here should add height
+    min-height: 0;
+}
+
+// Holds the editor for the whole session. Monaco measures its container to
+// decide how much to draw, so this has to have a real height: as a bare flex
+// child it collapsed to a few pixels and the editor rendered one line.
 .pb-cloud-editor-host {
     position: relative;
     flex: 1 1 auto;
     min-height: 0;
+    // belt and braces, since monaco reads the computed height
+    height: 100%;
 
-    // the editor root, which must shrink to what is left rather than
-    // insisting on the full height
     > .pb-app {
         height: 100%;
     }
 }
 
 .pb-cloud-loading {
-    position: absolute;
-    inset: 0;
+    position: fixed;
+    inset: $header-height 0 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -153,7 +163,9 @@ $header-height: 40px;
 // ===== dashboard =====
 
 .pb-cloud-dashboard {
-    height: 100%;
+    // fills the screen, since the editor is hidden on this route
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     background-color: #f4f6f8;
     color: #0f172a;

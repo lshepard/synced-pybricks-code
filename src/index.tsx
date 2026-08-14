@@ -13,6 +13,7 @@ import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { createLogger } from 'redux-logger';
 import createSagaMiddleware from 'redux-saga';
 import { appVersion } from './app/constants';
+import AppShell from './cloud/AppShell';
 import Dashboard from './cloud/Dashboard';
 import ProjectPage from './cloud/ProjectPage';
 import { debugMiddleware } from './cloud/debug';
@@ -93,10 +94,15 @@ const root = createRoot(container);
 // but the editor pane stays empty. Keeping the whole app in one route means
 // the editor is created once and stays.
 const router = createBrowserRouter([
-    { path: '/', element: <Dashboard /> },
-    { path: '/project/:slug', element: <ProjectPage /> },
-    // anything else is a mistyped or stale link; the dashboard is the way back
-    { path: '*', element: <Dashboard /> },
+    {
+        element: <AppShell />,
+        children: [
+            { path: '/', element: <Dashboard /> },
+            { path: '/project/:slug', element: <ProjectPage /> },
+            // a mistyped or stale link; the dashboard is the way back
+            { path: '*', element: <Dashboard /> },
+        ],
+    },
 ]);
 
 root.render(
