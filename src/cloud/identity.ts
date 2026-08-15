@@ -10,8 +10,7 @@ import { maxAuthorLength } from './protocol';
 const nameKey = 'cloud.name';
 const sessionKey = 'cloud.sessionId';
 const projectKey = 'cloud.project';
-const savedKey = 'cloud.lastSavedAt';
-const editedKey = 'cloud.lastEditedAt';
+const versionKey = 'cloud.version';
 
 /**
  * Reads the stored display name.
@@ -67,39 +66,47 @@ export function getCurrentProject(): string | undefined {
 }
 
 /**
- * Records which project the local files belong to, and marks them as saved.
+ * Records which project the local files belong to.
  *
  * @param slug The project, or undefined to forget.
  */
 export function setCurrentProject(slug: string | undefined): void {
     if (slug === undefined) {
         localStorage.removeItem(projectKey);
-        localStorage.removeItem(savedKey);
-        localStorage.removeItem(editedKey);
+        localStorage.removeItem(versionKey);
         return;
     }
 
     localStorage.setItem(projectKey, slug);
 }
 
-/** Records that the local files were just saved to the cloud. */
-export function markSaved(): void {
-    localStorage.setItem(savedKey, String(Date.now()));
-}
-
-/** Records that the local files were just edited. */
-export function markEdited(): void {
-    localStorage.setItem(editedKey, String(Date.now()));
+/**
+ * Records which version the local files came from.
+ *
+ * Set when a version is loaded and when one is saved, since in both cases the
+ * files on this machine are that version.
+ *
+ * @param slug The project the version belongs to.
+ * @param id The version id.
+ */
+export function setLocalVersion(slug: string, id: number): void {
+    localStorage.setItem(projectKey, slug);
+    localStorage.setItem(versionKey, String(id));
 }
 
 /**
- * Tests whether local files have changed since the last cloud save.
+ * Reads which version the local files came from.
  *
- * @returns True if there are edits that have not been saved.
+ * @param slug The project being opened.
+ * @returns The version id, or undefined if the local files are from another
+ * project or from no version at all.
  */
-export function isDirty(): boolean {
-    const edited = Number(localStorage.getItem(editedKey) ?? 0);
-    const saved = Number(localStorage.getItem(savedKey) ?? 0);
+export function getLocalVersion(slug: string): number | undefined {
+    if (localStorage.getItem(projectKey) !== slug) {
+        return undefined;
+    }
 
-    return edited > saved;
+    const stored = Number(localStorage.getItem(versionKey));
+
+    return Number.isFinite(stored) && stored > 0 ? stored : undefined;
 }

@@ -12,11 +12,11 @@ import * as api from './api';
 import {
     clearName,
     getCurrentProject,
+    getLocalVersion,
     getName,
     getSessionId,
-    isDirty,
-    markSaved,
     setCurrentProject,
+    setLocalVersion,
 } from './identity';
 import { Lock, ProjectInfo, VersionInfo } from './protocol';
 import { useReadProjectFiles, useReplaceProjectFiles } from './useProjectFiles';
@@ -51,7 +51,6 @@ const ProjectPage: React.FunctionComponent = () => {
     const [versions, setVersions] = useState<VersionInfo[]>([]);
     const [lock, setLock] = useState<Lock | undefined>();
     const [error, setError] = useState<string | undefined>();
-    const [dirty, setDirty] = useState(false);
     const [who, setWho] = useState(getName());
     const [askName, setAskName] = useState(getName() === undefined);
     const [showFeed, setShowFeed] = useState(false);
@@ -64,27 +63,42 @@ const ProjectPage: React.FunctionComponent = () => {
     // guards against loading the project twice under React strict mode
     const loadedFor = useRef<string | undefined>(undefined);
 
-    /** Replaces local files with a version's, and opens one in the editor. */
+    /**
+     * Replaces local files with a version's, and opens one in the editor.
+     *
+     * @param versionId The version to load, or undefined for the newest.
+     * @param force Load even when local already holds that version. Used when
+     * a version is picked from the history, where the point is to go back.
+     */
     const loadVersion = useCallback(
-        async (versionId?: number) => {
+        async (versionId?: number, force = false) => {
             const list = await api.fetchVersions(slug);
             setVersions(list);
 
             const target = versionId ?? list[0]?.id;
 
-            // A project with nothing saved yet starts empty; the explorer's +
-            // button is how a first file gets made. What matters is that it
-            // does not inherit whatever the last project left behind.
-            const files =
-                target === undefined
-                    ? {}
-                    : (await api.fetchVersion(slug, target)).files;
+            // Local files are only replaced when the server has something this
+            // machine has not seen. Replacing them unconditionally throws away
+            // anything not yet saved, which for a project whose first file has
+            // just been made is the whole project.
+            //
+            // A project with no versions therefore leaves local storage alone:
+            // there is nothing on the server to reconcile against, and the
+            // files here are waiting to become its first save.
+            if (target === undefined) {
+                setCurrentProject(slug);
+                return;
+            }
 
-            await replaceProjectFiles(files);
+            if (!force && getLocalVersion(slug) === target) {
+                // already have exactly this version
+                return;
+            }
 
-            setCurrentProject(slug);
-            markSaved();
-            setDirty(false);
+            const snapshot = await api.fetchVersion(slug, target);
+            await replaceProjectFiles(snapshot.files);
+
+            setLocalVersion(slug, target);
         },
         [slug, replaceProjectFiles],
     );
@@ -124,17 +138,15 @@ const ProjectPage: React.FunctionComponent = () => {
 
             const current = getCurrentProject();
 
-            // Unsaved work is the only reason not to load: replacing the files
-            // would throw it away. Ask first, whichever project it belongs to.
-            if (current && isDirty()) {
+            // Local files belonging to another project that were never saved
+            // would be destroyed by loading this one, so ask first. A project
+            // whose files came from a known version has nothing to lose.
+            if (current && current !== slug && getLocalVersion(current) === undefined) {
                 setPending(current);
                 setPhase('confirmSwitch');
                 return;
             }
 
-            // Otherwise always load, which clears whatever the last project
-            // left behind. Local files are only ever a copy of a saved
-            // version, so there is nothing to lose by replacing them.
             await loadVersion();
             await takeLock();
 
@@ -168,13 +180,6 @@ const ProjectPage: React.FunctionComponent = () => {
         window.addEventListener('pagehide', release);
         return () => window.removeEventListener('pagehide', release);
     }, [slug]);
-
-    // watching storage is enough to know there are edits: the editor writes
-    // every keystroke to it
-    useEffect(() => {
-        const timer = setInterval(() => setDirty(isDirty()), 2000);
-        return () => clearInterval(timer);
-    }, []);
 
     const heldByOther = lock === undefined && phase === 'ready';
 
@@ -229,10 +234,11 @@ const ProjectPage: React.FunctionComponent = () => {
                 {phase === 'ready' && (
                     <SaveButton
                         slug={slug}
-                        dirty={dirty}
                         readOnly={heldByOther}
-                        onSaved={async () => {
-                            setDirty(false);
+                        onSaved={async (version) => {
+                            // the files here are now that version, so opening
+                            // this project again will not reload over them
+                            setLocalVersion(slug, version.id);
                             setVersions(await api.fetchVersions(slug));
                         }}
                     />
@@ -304,12 +310,20 @@ const ProjectPage: React.FunctionComponent = () => {
                                             // save to wherever the files came
                                             // from, not to the project being
                                             // opened
-                                            await api.saveVersion(pending, {
-                                                files: await readProjectFiles(),
-                                                author: getName() ?? 'Someone',
-                                                sessionId: getSessionId(),
-                                            });
-                                            markSaved();
+                                            const saved = await api.saveVersion(
+                                                pending,
+                                                {
+                                                    files: await readProjectFiles(),
+                                                    author: getName() ?? 'Someone',
+                                                    sessionId: getSessionId(),
+                                                },
+                                            );
+
+                                            // those files are now a version of
+                                            // the project they came from, so
+                                            // nothing is lost by loading over
+                                            // them
+                                            setLocalVersion(pending, saved.id);
                                             setSavingPending(false);
                                             await proceedWithLoad();
                                         } catch (err) {
@@ -351,7 +365,10 @@ const ProjectPage: React.FunctionComponent = () => {
                                     onClick={async () => {
                                         setShowFeed(false);
                                         setPhase('loading');
-                                        await loadVersion(version.id);
+                                        // forced: picking a version from the
+                                        // history means loading it even if it
+                                        // is the one already here
+                                        await loadVersion(version.id, true);
                                         setPhase('ready');
                                     }}
                                 >

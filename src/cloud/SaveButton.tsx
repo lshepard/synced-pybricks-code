@@ -12,17 +12,15 @@ import {
 } from '@blueprintjs/core';
 import React, { useCallback, useState } from 'react';
 import * as api from './api';
-import { getName, getSessionId, markSaved } from './identity';
-import { maxNoteLength } from './protocol';
+import { getName, getSessionId } from './identity';
+import { VersionInfo, maxNoteLength } from './protocol';
 import { useReadProjectFiles } from './useProjectFiles';
 
 type SaveButtonProps = {
     /** The project being edited. */
     slug: string;
-    /** Whether there are unsaved local changes. */
-    dirty: boolean;
-    /** Called after a successful save. */
-    onSaved: () => void;
+    /** Called with the version that was written. */
+    onSaved: (version: VersionInfo) => void;
     /** Whether saving is blocked because someone else holds the lock. */
     readOnly: boolean;
 };
@@ -35,7 +33,6 @@ type SaveButtonProps = {
  */
 const SaveButton: React.FunctionComponent<SaveButtonProps> = ({
     slug,
-    dirty,
     onSaved,
     readOnly,
 }) => {
@@ -58,18 +55,17 @@ const SaveButton: React.FunctionComponent<SaveButtonProps> = ({
                 return;
             }
 
-            await api.saveVersion(slug, {
+            const version = await api.saveVersion(slug, {
                 files,
                 author: getName() ?? 'Someone',
                 note: note.trim(),
                 sessionId: getSessionId(),
             });
 
-            markSaved();
             setBusy(false);
             setAsking(false);
             setNote('');
-            onSaved();
+            onSaved(version);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not save.');
             setBusy(false);
@@ -93,7 +89,6 @@ const SaveButton: React.FunctionComponent<SaveButtonProps> = ({
                     setAsking(true);
                 }}
             />
-            {dirty && !readOnly && <span className="pb-cloud-dirty-dot" />}
 
             <Dialog
                 isOpen={asking}
