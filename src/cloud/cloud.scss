@@ -61,6 +61,21 @@ $header-height: 40px;
     }
 }
 
+// Keeps the editor laid out at full size while another route is showing.
+// Hiding it with display: none makes monaco measure itself as 0x0, and it does
+// not measure again on its own, so it came back collapsed.
+.pb-cloud-editor-host-away {
+    position: absolute;
+    // far enough that it cannot be seen or scrolled to
+    left: -20000px;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    // and cannot be reached by tab or a stray click
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .pb-cloud-loading {
     position: fixed;
     inset: $header-height 0 0;

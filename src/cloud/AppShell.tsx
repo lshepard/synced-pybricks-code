@@ -35,9 +35,16 @@ const AppShell: React.FunctionComponent = () => {
     return (
         <>
             <Outlet />
+            {/*
+             * Moved out of the way rather than hidden. display: none makes
+             * monaco measure itself as 0x0, and it only measures again when
+             * something asks it to, so coming back from the dashboard could
+             * leave the editor collapsed with a file open in it.
+             */}
             <div
-                className="pb-cloud-editor-host"
-                style={{ display: inProject ? undefined : 'none' }}
+                className={`pb-cloud-editor-host${
+                    inProject ? '' : ' pb-cloud-editor-host-away'
+                }`}
             >
                 <App />
             </div>
