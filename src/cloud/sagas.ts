@@ -3,15 +3,9 @@
 
 // Moving whole projects between the cloud and the editor's local storage.
 //
-// Everything here goes through the file storage and editor actions the app
-// already uses, rather than writing to the database underneath them. Those
-// actions own the editor's invariants: which files are open, the web lock per
-// open file, the monaco model per file, and the active file history. Reaching
-// past them leaves all four pointing at files that no longer exist.
-//
-// Loading a project therefore updates files in place where it can. A file that
-// exists in both the snapshot and local storage keeps its uuid, so the editor
-// keeps its lock, its model and its tab, and only the text changes.
+// Loading a project closes all open files, clears storage, writes the new
+// files, then opens one. This is simpler than trying to update files in place,
+// which requires coordinating Redux state with Monaco models.
 
 import {
     call,
@@ -26,7 +20,6 @@ import {
     editorActivateFile,
     editorCloseFile,
     editorDidCloseFile,
-    editorReplaceFile,
 } from '../editor/actions';
 import { FileStorageDb } from '../fileStorage';
 import {
@@ -89,79 +82,55 @@ function* writeFile(path: string, contents: string): Generator {
     }
 }
 
-/** Removes one file, closing it in the editor first if it is open. */
-function* deleteFile(path: string, uuid: string): Generator {
-    const openUuids = yield* select((s: RootState) => s.editor.openFileUuids);
-
-    // deleting a file that is open in the editor fails with "in use", so the
-    // editor has to let go of it first
-    if (openUuids.includes(uuid as never)) {
-        yield* put(editorCloseFile(uuid as never));
-        yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
-    }
-
-    yield* put(fileStorageDeleteFile(path));
-
-    const { didFailToDelete } = yield* race({
-        didDelete: take(fileStorageDidDeleteFile.when((a) => a.path === path)),
-        didFailToDelete: take(
-            fileStorageDidFailToDeleteFile.when((a) => a.path === path),
-        ),
-    });
-
-    if (didFailToDelete) {
-        throw didFailToDelete.error;
-    }
-}
-
 /**
- * Makes local storage match a project's file set.
+ * Replaces local storage with a project's files.
  *
- * Files present in both are updated rather than replaced, which is what keeps
- * the editor working: the uuid stays the same, so its lock, model and tab all
- * remain valid and it simply shows the new text.
+ * Closes all open tabs, deletes all files, writes the new ones, then opens
+ * main.py (or the first file). This is jarring but consistent.
  */
 function* handleCloudLoadFiles(action: ReturnType<typeof cloudLoadFiles>): Generator {
     try {
         const db = yield* getContext<FileStorageDb>('fileStorage');
-        const existing = yield* call(() => db.metadata.toArray());
+
+        // 1. Close all open files
         const openUuids = yield* select((s: RootState) => s.editor.openFileUuids);
 
-        // remove what the project does not have
+        for (const uuid of openUuids) {
+            yield* put(editorCloseFile(uuid));
+            yield* take(editorDidCloseFile.when((a) => a.uuid === uuid));
+        }
+
+        // 2. Delete all existing files
+        const existing = yield* call(() => db.metadata.toArray());
+
         for (const file of existing) {
-            if (!(file.path in action.files)) {
-                yield* call(deleteFile, file.path, file.uuid);
+            yield* put(fileStorageDeleteFile(file.path));
+
+            const { didFailToDelete } = yield* race({
+                didDelete: take(
+                    fileStorageDidDeleteFile.when((a) => a.path === file.path),
+                ),
+                didFailToDelete: take(
+                    fileStorageDidFailToDeleteFile.when((a) => a.path === file.path),
+                ),
+            });
+
+            if (didFailToDelete) {
+                throw didFailToDelete.error;
             }
         }
 
-        // add or update the rest
+        // 3. Write all new files
         for (const [path, contents] of Object.entries(action.files)) {
-            const match = existing.find((f) => f.path === path);
-
-            if (match && openUuids.includes(match.uuid)) {
-                // the editor owns this file's text while it is open, so ask it
-                // to change it rather than writing underneath it
-                yield* put(editorReplaceFile(match.uuid, contents));
-                continue;
-            }
-
             yield* call(writeFile, path, contents);
         }
 
-        // Show something. Writing a file puts it in the explorer but does not
-        // open it, so without this the editor pane stays empty with a project
-        // fully loaded behind it.
-        const openNow = yield* select((s: RootState) => s.editor.openFileUuids);
+        // 4. Open main.py or the first file
+        const files = yield* call(() => db.metadata.toArray());
+        const first = files.find((f) => f.path === 'main.py') ?? files[0];
 
-        if (openNow.length === 0) {
-            const files = yield* call(() => db.metadata.toArray());
-
-            // main.py is the program a hub runs, so it is the one to show
-            const first = files.find((f) => f.path === 'main.py') ?? files[0];
-
-            if (first) {
-                yield* put(editorActivateFile(first.uuid));
-            }
+        if (first) {
+            yield* put(editorActivateFile(first.uuid));
         }
 
         yield* put(cloudDidLoadFiles());

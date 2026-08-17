@@ -6,7 +6,6 @@ import {
     editorActivateFile,
     editorCloseFile,
     editorDidCloseFile,
-    editorReplaceFile,
 } from '../editor/actions';
 import { FileStorageDb } from '../fileStorage';
 import {
@@ -31,9 +30,8 @@ const helpersUuid = uuid(1);
 /**
  * A file storage stand-in.
  *
- * The saga reads storage twice: once to work out what to change, and again at
- * the end to pick a file to show. `after` is what the second read returns, so
- * a test can say what storage looks like once the writes have landed.
+ * The saga reads storage twice: once to find files to delete, and again at
+ * the end to pick a file to show. `after` is what the second read returns.
  */
 function mockStorage(files: Array<{ path: string; uuid: string }>, after = files) {
     let reads = 0;
@@ -74,81 +72,16 @@ describe('reading files to save', () => {
 });
 
 describe('loading a project', () => {
-    it('should write a file that does not exist yet', async () => {
-        const saga = new AsyncSaga(cloud, mockStorage([]));
-
-        saga.put(cloudLoadFiles({ 'main.py': 'print(1)' }));
-
-        await expect(saga.take()).resolves.toEqual(
-            fileStorageWriteFile('main.py', 'print(1)'),
-        );
-
-        saga.put(fileStorageDidWriteFile('main.py', mainUuid));
-
-        await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
-
-        await saga.end();
-    });
-
-    it('should update an open file through the editor', async () => {
-        // The editor owns an open file's text. Writing underneath it would
-        // leave the tab showing something else, so it is asked to change the
-        // text instead, which keeps the uuid, the lock and the model intact.
+    it('should write a file into empty storage', async () => {
         const saga = new AsyncSaga(
             cloud,
-            mockStorage([{ path: 'main.py', uuid: mainUuid }]),
-        );
-        saga.updateState({ editor: { openFileUuids: [mainUuid] } });
-
-        saga.put(cloudLoadFiles({ 'main.py': 'print(2)' }));
-
-        await expect(saga.take()).resolves.toEqual(
-            editorReplaceFile(mainUuid, 'print(2)'),
-        );
-
-        await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
-
-        await saga.end();
-    });
-
-    it('should write a closed file that already exists', async () => {
-        const saga = new AsyncSaga(
-            cloud,
-            mockStorage([{ path: 'main.py', uuid: mainUuid }]),
-        );
-        saga.updateState({ editor: { openFileUuids: [] } });
-
-        saga.put(cloudLoadFiles({ 'main.py': 'print(2)' }));
-
-        await expect(saga.take()).resolves.toEqual(
-            fileStorageWriteFile('main.py', 'print(2)'),
-        );
-
-        saga.put(fileStorageDidWriteFile('main.py', mainUuid));
-
-        // nothing was open, so a file is opened to show
-        await expect(saga.take()).resolves.toEqual(editorActivateFile(mainUuid));
-        await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
-
-        await saga.end();
-    });
-
-    it('should remove a file the project does not have', async () => {
-        const saga = new AsyncSaga(
-            cloud,
-            mockStorage(
-                [{ path: 'stale.py', uuid: helpersUuid }],
-                [{ path: 'main.py', uuid: mainUuid }],
-            ),
+            mockStorage([], [{ path: 'main.py', uuid: mainUuid }]),
         );
         saga.updateState({ editor: { openFileUuids: [] } });
 
         saga.put(cloudLoadFiles({ 'main.py': 'print(1)' }));
 
-        await expect(saga.take()).resolves.toEqual(fileStorageDeleteFile('stale.py'));
-
-        saga.put(fileStorageDidDeleteFile('stale.py'));
-
+        // no files to close, no files to delete, just write
         await expect(saga.take()).resolves.toEqual(
             fileStorageWriteFile('main.py', 'print(1)'),
         );
@@ -161,13 +94,11 @@ describe('loading a project', () => {
         await saga.end();
     });
 
-    it('should close a file in the editor before deleting it', async () => {
-        // deleting a file that is open fails with "in use", which is why the
-        // editor is asked to let go of it first
+    it('should close open files before deleting', async () => {
         const saga = new AsyncSaga(
             cloud,
             mockStorage(
-                [{ path: 'stale.py', uuid: helpersUuid }],
+                [{ path: 'old.py', uuid: helpersUuid }],
                 [{ path: 'main.py', uuid: mainUuid }],
             ),
         );
@@ -175,21 +106,47 @@ describe('loading a project', () => {
 
         saga.put(cloudLoadFiles({ 'main.py': 'print(1)' }));
 
+        // 1. close the open file
         await expect(saga.take()).resolves.toEqual(editorCloseFile(helpersUuid));
-
         saga.put(editorDidCloseFile(helpersUuid));
 
-        await expect(saga.take()).resolves.toEqual(fileStorageDeleteFile('stale.py'));
+        // 2. delete it
+        await expect(saga.take()).resolves.toEqual(fileStorageDeleteFile('old.py'));
+        saga.put(fileStorageDidDeleteFile('old.py'));
 
-        saga.put(fileStorageDidDeleteFile('stale.py'));
+        // 3. write the new file
         await expect(saga.take()).resolves.toEqual(
             fileStorageWriteFile('main.py', 'print(1)'),
         );
+        saga.put(fileStorageDidWriteFile('main.py', mainUuid));
 
-        // the editor let go of the file it had open, which is the state the
-        // saga sees when it looks for something to show
+        // 4. open main.py
+        await expect(saga.take()).resolves.toEqual(editorActivateFile(mainUuid));
+        await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
+
+        await saga.end();
+    });
+
+    it('should delete all existing files before writing new ones', async () => {
+        const saga = new AsyncSaga(
+            cloud,
+            mockStorage(
+                [{ path: 'stale.py', uuid: helpersUuid }],
+                [{ path: 'main.py', uuid: mainUuid }],
+            ),
+        );
         saga.updateState({ editor: { openFileUuids: [] } });
 
+        saga.put(cloudLoadFiles({ 'main.py': 'print(1)' }));
+
+        // delete existing file
+        await expect(saga.take()).resolves.toEqual(fileStorageDeleteFile('stale.py'));
+        saga.put(fileStorageDidDeleteFile('stale.py'));
+
+        // write new file
+        await expect(saga.take()).resolves.toEqual(
+            fileStorageWriteFile('main.py', 'print(1)'),
+        );
         saga.put(fileStorageDidWriteFile('main.py', mainUuid));
 
         await expect(saga.take()).resolves.toEqual(editorActivateFile(mainUuid));
@@ -208,8 +165,50 @@ describe('loading a project', () => {
         saga.put(cloudLoadFiles({}));
 
         await expect(saga.take()).resolves.toEqual(fileStorageDeleteFile('main.py'));
-
         saga.put(fileStorageDidDeleteFile('main.py'));
+
+        // no files to open
+        await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
+
+        await saga.end();
+    });
+
+    it('should close multiple open files', async () => {
+        const saga = new AsyncSaga(
+            cloud,
+            mockStorage(
+                [
+                    { path: 'main.py', uuid: mainUuid },
+                    { path: 'helpers.py', uuid: helpersUuid },
+                ],
+                [{ path: 'new.py', uuid: uuid(2) }],
+            ),
+        );
+        saga.updateState({ editor: { openFileUuids: [mainUuid, helpersUuid] } });
+
+        saga.put(cloudLoadFiles({ 'new.py': 'print(3)' }));
+
+        // close both open files
+        await expect(saga.take()).resolves.toEqual(editorCloseFile(mainUuid));
+        saga.put(editorDidCloseFile(mainUuid));
+
+        await expect(saga.take()).resolves.toEqual(editorCloseFile(helpersUuid));
+        saga.put(editorDidCloseFile(helpersUuid));
+
+        // delete both
+        await expect(saga.take()).resolves.toEqual(fileStorageDeleteFile('main.py'));
+        saga.put(fileStorageDidDeleteFile('main.py'));
+
+        await expect(saga.take()).resolves.toEqual(fileStorageDeleteFile('helpers.py'));
+        saga.put(fileStorageDidDeleteFile('helpers.py'));
+
+        // write new file
+        await expect(saga.take()).resolves.toEqual(
+            fileStorageWriteFile('new.py', 'print(3)'),
+        );
+        saga.put(fileStorageDidWriteFile('new.py', uuid(2)));
+
+        await expect(saga.take()).resolves.toEqual(editorActivateFile(uuid(2)));
         await expect(saga.take()).resolves.toEqual(cloudDidLoadFiles());
 
         await saga.end();
