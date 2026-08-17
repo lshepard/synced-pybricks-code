@@ -8,6 +8,23 @@ import App from '../app/App';
 import { showFileList } from './preferences';
 
 /**
+ * Clears the editor's file history from sessionStorage.
+ *
+ * The editor saves open file UUIDs to sessionStorage and restores them on
+ * reload. In cloud mode, files are deleted and recreated with new UUIDs when
+ * a project is loaded, so the old history points to files that don't exist.
+ */
+function clearEditorHistory(): void {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const key = sessionStorage.key(i);
+
+        if (key?.startsWith('editor.activeFileHistory.')) {
+            sessionStorage.removeItem(key);
+        }
+    }
+}
+
+/**
  * Holds the editor for the life of the session.
  *
  * Monaco gives each editor it creates its own id, and the editor's open file
@@ -28,6 +45,7 @@ const AppShell: React.FunctionComponent = () => {
     // read happens once too, so this has to be set before it rather than in an
     // effect afterwards.
     useState(() => {
+        clearEditorHistory();
         showFileList();
         return null;
     });
