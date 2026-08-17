@@ -213,7 +213,9 @@ function* handleEditorOpenFile(
             yield* put(fileStorageStoreTextFileValue(action.uuid, model.getValue()));
         } finally {
             for (const callback of defer.reverse()) {
-                callback();
+                // some callbacks (like lock release) are async and must complete
+                // before we signal that the file is closed
+                yield* call(() => callback());
             }
 
             // only send the did close action if the corresponding action requested it
