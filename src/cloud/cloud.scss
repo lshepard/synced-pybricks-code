@@ -336,3 +336,19 @@ $header-height: 40px;
     gap: 10px;
     flex-shrink: 0;
 }
+
+// ===== newer version banner =====
+
+// Informational rather than a warning: nothing is wrong, there is simply
+// something newer to load if it is wanted.
+.pb-cloud-update {
+    background: #e8f1fb;
+    border-bottom: 1px solid #a3c5e8;
+    color: #1c4e80;
+    font-size: 13px;
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}

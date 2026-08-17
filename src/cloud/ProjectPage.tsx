@@ -5,6 +5,7 @@ import './cloud.scss';
 import { Button, Dialog, DialogBody, DialogFooter, Spinner } from '@blueprintjs/core';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { db } from '../fileStorage/context';
 import CloudHeader from './CloudHeader';
 import NameGate from './NameGate';
 import SaveButton from './SaveButton';
@@ -36,9 +37,11 @@ type Phase = 'loading' | 'confirmSwitch' | 'ready' | 'failed';
 /**
  * One project: the editor, plus the controls that connect it to the cloud.
  *
- * Local storage holds one project at a time, so opening a project replaces
- * whatever was there. When the previous project had unsaved changes, that is
- * confirmed first.
+ * Opening a project does not touch the files already in the editor. The cloud
+ * is only read into local storage when asked: from the banner offering a newer
+ * version, from the history feed, or when switching away from another
+ * project's files. The one exception is an empty editor, which has nothing to
+ * lose.
  */
 const ProjectPage: React.FunctionComponent = () => {
     const { slug = '' } = useParams();
@@ -55,6 +58,10 @@ const ProjectPage: React.FunctionComponent = () => {
     const [askName, setAskName] = useState(getName() === undefined);
     const [showFeed, setShowFeed] = useState(false);
 
+    // a version on the server newer than the one these files came from, until
+    // it is either loaded or waved away
+    const [available, setAvailable] = useState<VersionInfo | undefined>();
+
     // which project the unsaved local files belong to, while asking about them
     const [pending, setPending] = useState<string | undefined>();
     const [savingPending, setSavingPending] = useState(false);
@@ -66,49 +73,72 @@ const ProjectPage: React.FunctionComponent = () => {
     /**
      * Replaces local files with a version's, and opens one in the editor.
      *
+     * Always destructive: whatever is in the editor is thrown away. Only ever
+     * called for something the person actually asked for — the update banner,
+     * the history feed, or switching projects — never on its own.
+     *
      * @param versionId The version to load, or undefined for the newest.
-     * @param force Load even when local already holds that version. Used when
-     * a version is picked from the history, where the point is to go back.
      */
     const loadVersion = useCallback(
-        async (versionId?: number, force = false) => {
-            console.log('[ProjectPage] loadVersion called, force:', force);
+        async (versionId?: number) => {
             const list = await api.fetchVersions(slug);
             setVersions(list);
 
             const target = versionId ?? list[0]?.id;
-            const localVersion = getLocalVersion(slug);
-            console.log('[ProjectPage] target version:', target, 'local version:', localVersion);
 
-            // Local files are only replaced when the server has something this
-            // machine has not seen. Replacing them unconditionally throws away
-            // anything not yet saved, which for a project whose first file has
-            // just been made is the whole project.
-            //
-            // A project with no versions therefore leaves local storage alone:
-            // there is nothing on the server to reconcile against, and the
-            // files here are waiting to become its first save.
+            // Nothing has ever been saved, so there is nothing to load. The
+            // files here are waiting to become the first version.
             if (target === undefined) {
-                console.log('[ProjectPage] no target version, skipping load');
                 setCurrentProject(slug);
                 return;
             }
 
-            if (!force && localVersion === target) {
-                // already have exactly this version
-                console.log('[ProjectPage] version match, skipping load');
-                return;
-            }
-
-            console.log('[ProjectPage] loading version', target);
             const snapshot = await api.fetchVersion(slug, target);
             await replaceProjectFiles(snapshot.files);
 
-            console.log('[ProjectPage] setLocalVersion', slug, target);
+            // Recorded only after the files are actually in place, so a load
+            // that fails part way does not claim to hold a version it does
+            // not. Without this the banner below has nothing to compare
+            // against and offers the same version on every reload.
             setLocalVersion(slug, target);
+            setAvailable(undefined);
         },
         [slug, replaceProjectFiles],
     );
+
+    /**
+     * Looks for a version newer than the one these files came from.
+     *
+     * Opening a project does not replace what is in the editor: unsaved work
+     * belongs to whoever wrote it, and taking it away because someone else
+     * pressed save is not a decision this page gets to make. The exception is
+     * an editor with no files, where there is nothing to lose and asking first
+     * is pure friction.
+     */
+    const checkForUpdates = useCallback(async () => {
+        const list = await api.fetchVersions(slug);
+        setVersions(list);
+
+        const latest = list[0];
+
+        if (latest === undefined) {
+            // nothing saved yet; these files are the project
+            setCurrentProject(slug);
+            return;
+        }
+
+        // Counted at the moment the decision is made rather than watched, so
+        // that an empty editor cannot be confused with a query that has not
+        // come back yet.
+        if ((await db.metadata.count()) === 0) {
+            await loadVersion(latest.id);
+            return;
+        }
+
+        if (getLocalVersion(slug) !== latest.id) {
+            setAvailable(latest);
+        }
+    }, [slug, loadVersion]);
 
     /** Takes the lock, tolerating someone else already holding it. */
     const takeLock = useCallback(async () => {
@@ -130,6 +160,16 @@ const ProjectPage: React.FunctionComponent = () => {
         setPhase('ready');
     }, [loadVersion, takeLock]);
 
+    /** Keeps the local files and opens the editor on them. */
+    const proceedWithoutLoading = useCallback(async () => {
+        setPhase('loading');
+        // The files are now being edited as this project, so a later save goes
+        // here and the switch prompt does not ask again.
+        setCurrentProject(slug);
+        await takeLock();
+        setPhase('ready');
+    }, [slug, takeLock]);
+
     const open = useCallback(async () => {
         try {
             const all = await api.fetchProjects();
@@ -145,16 +185,17 @@ const ProjectPage: React.FunctionComponent = () => {
 
             const current = getCurrentProject();
 
-            // Local files belonging to another project that were never saved
-            // would be destroyed by loading this one, so ask first. A project
-            // whose files came from a known version has nothing to lose.
-            if (current && current !== slug && getLocalVersion(current) === undefined) {
+            // Files from another project are still sitting in the editor.
+            // Which one they belong to is not something to guess at, so it is
+            // asked rather than resolved by loading over them.
+            if (current && current !== slug && (await db.metadata.count()) > 0) {
                 setPending(current);
+                setVersions(await api.fetchVersions(slug));
                 setPhase('confirmSwitch');
                 return;
             }
 
-            await loadVersion();
+            await checkForUpdates();
             await takeLock();
 
             setPhase('ready');
@@ -162,7 +203,7 @@ const ProjectPage: React.FunctionComponent = () => {
             setError(err instanceof Error ? err.message : 'Could not open that.');
             setPhase('failed');
         }
-    }, [slug, loadVersion, takeLock]);
+    }, [slug, checkForUpdates, takeLock]);
 
     useEffect(() => {
         if (askName || loadedFor.current === slug) {
@@ -278,6 +319,43 @@ const ProjectPage: React.FunctionComponent = () => {
                 </div>
             )}
 
+            {available && phase === 'ready' && (
+                <div className="pb-cloud-update">
+                    <span>
+                        {available.author} saved a newer version{' '}
+                        {when(available.savedAt)}.
+                    </span>
+                    <Button
+                        small
+                        intent="primary"
+                        text="Load it"
+                        onClick={async () => {
+                            setPhase('loading');
+
+                            try {
+                                await loadVersion(available.id);
+                            } catch (err) {
+                                setError(
+                                    err instanceof Error
+                                        ? err.message
+                                        : 'Could not load that version.',
+                                );
+                            }
+
+                            setPhase('ready');
+                        }}
+                    />
+                    <Button
+                        small
+                        minimal
+                        text="Dismiss"
+                        // only for this visit: not loading it now says nothing
+                        // about the next time the project is opened
+                        onClick={() => setAvailable(undefined)}
+                    />
+                </div>
+            )}
+
             {phase === 'loading' && (
                 <div className="pb-cloud-loading">
                     <Spinner />
@@ -286,18 +364,20 @@ const ProjectPage: React.FunctionComponent = () => {
 
             <Dialog
                 isOpen={phase === 'confirmSwitch'}
-                title="Unsaved changes"
+                title="Files from another project"
                 isCloseButtonShown={false}
             >
                 <DialogBody>
                     <p>
-                        The editor has changes that were never saved
-                        {pending && pending !== slug ? (
-                            <>
-                                , from <strong>{pending}</strong>
-                            </>
-                        ) : null}
-                        . Opening this project will replace them.
+                        The editor is showing files from <strong>{pending}</strong>.
+                        This is <strong>{slug}</strong>.
+                    </p>
+                    <p>
+                        Keeping them leaves the editor as it is, and saving from here
+                        saves them to {slug}.
+                        {versions.length > 0
+                            ? ` Loading ${slug} replaces them with its latest version.`
+                            : ''}
                     </p>
                     {saveError && <div className="pb-cloud-error">{saveError}</div>}
                 </DialogBody>
@@ -345,11 +425,18 @@ const ProjectPage: React.FunctionComponent = () => {
                                 />
                             )}
                             <Button
-                                intent="danger"
-                                text="Discard them"
+                                text="Keep them"
                                 disabled={savingPending}
-                                onClick={proceedWithLoad}
+                                onClick={proceedWithoutLoading}
                             />
+                            {versions.length > 0 && (
+                                <Button
+                                    intent="danger"
+                                    text={`Load ${slug}`}
+                                    disabled={savingPending}
+                                    onClick={proceedWithLoad}
+                                />
+                            )}
                         </>
                     }
                 />
@@ -372,10 +459,17 @@ const ProjectPage: React.FunctionComponent = () => {
                                     onClick={async () => {
                                         setShowFeed(false);
                                         setPhase('loading');
-                                        // forced: picking a version from the
-                                        // history means loading it even if it
-                                        // is the one already here
-                                        await loadVersion(version.id, true);
+
+                                        try {
+                                            await loadVersion(version.id);
+                                        } catch (err) {
+                                            setError(
+                                                err instanceof Error
+                                                    ? err.message
+                                                    : 'Could not load that version.',
+                                            );
+                                        }
+
                                         setPhase('ready');
                                     }}
                                 >
