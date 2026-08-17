@@ -90,10 +90,12 @@ function* writeFile(path: string, contents: string): Generator {
  */
 function* handleCloudLoadFiles(action: ReturnType<typeof cloudLoadFiles>): Generator {
     try {
+        console.log('[cloud] handleCloudLoadFiles started');
         const db = yield* getContext<FileStorageDb>('fileStorage');
 
         // 1. Close all open files
         const openUuids = yield* select((s: RootState) => s.editor.openFileUuids);
+        console.log('[cloud] openUuids to close:', openUuids);
 
         for (const uuid of openUuids) {
             yield* put(editorCloseFile(uuid));
@@ -102,6 +104,7 @@ function* handleCloudLoadFiles(action: ReturnType<typeof cloudLoadFiles>): Gener
 
         // 2. Delete all existing files
         const existing = yield* call(() => db.metadata.toArray());
+        console.log('[cloud] existing files to delete:', existing.map((f) => ({ path: f.path, uuid: f.uuid })));
 
         for (const file of existing) {
             yield* put(fileStorageDeleteFile(file.path));
@@ -127,12 +130,15 @@ function* handleCloudLoadFiles(action: ReturnType<typeof cloudLoadFiles>): Gener
 
         // 4. Open main.py or the first file
         const files = yield* call(() => db.metadata.toArray());
+        console.log('[cloud] new files after write:', files.map((f) => ({ path: f.path, uuid: f.uuid })));
         const first = files.find((f) => f.path === 'main.py') ?? files[0];
 
         if (first) {
+            console.log('[cloud] activating file:', first.path, first.uuid);
             yield* put(editorActivateFile(first.uuid));
         }
 
+        console.log('[cloud] handleCloudLoadFiles completed successfully');
         yield* put(cloudDidLoadFiles());
     } catch (err) {
         yield* put(cloudDidFailToLoadFiles(ensureError(err)));

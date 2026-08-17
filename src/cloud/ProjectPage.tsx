@@ -72,10 +72,13 @@ const ProjectPage: React.FunctionComponent = () => {
      */
     const loadVersion = useCallback(
         async (versionId?: number, force = false) => {
+            console.log('[ProjectPage] loadVersion called, force:', force);
             const list = await api.fetchVersions(slug);
             setVersions(list);
 
             const target = versionId ?? list[0]?.id;
+            const localVersion = getLocalVersion(slug);
+            console.log('[ProjectPage] target version:', target, 'local version:', localVersion);
 
             // Local files are only replaced when the server has something this
             // machine has not seen. Replacing them unconditionally throws away
@@ -86,18 +89,22 @@ const ProjectPage: React.FunctionComponent = () => {
             // there is nothing on the server to reconcile against, and the
             // files here are waiting to become its first save.
             if (target === undefined) {
+                console.log('[ProjectPage] no target version, skipping load');
                 setCurrentProject(slug);
                 return;
             }
 
-            if (!force && getLocalVersion(slug) === target) {
+            if (!force && localVersion === target) {
                 // already have exactly this version
+                console.log('[ProjectPage] version match, skipping load');
                 return;
             }
 
+            console.log('[ProjectPage] loading version', target);
             const snapshot = await api.fetchVersion(slug, target);
             await replaceProjectFiles(snapshot.files);
 
+            console.log('[ProjectPage] setLocalVersion', slug, target);
             setLocalVersion(slug, target);
         },
         [slug, replaceProjectFiles],
