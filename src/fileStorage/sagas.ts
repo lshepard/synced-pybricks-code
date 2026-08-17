@@ -624,8 +624,9 @@ function* handleStoreTextFileValue(
             db.transaction('rw', db.metadata, db._contents, async () => {
                 const metadata = await db.metadata.get(action.uuid);
 
+                // file may have been deleted while the save was pending
                 if (!metadata) {
-                    throw new Error(`file with uuid '${action.uuid}' not found`);
+                    return;
                 }
 
                 const sha256 = await Dexie.waitFor(sha256Digest(action.value));
