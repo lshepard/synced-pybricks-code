@@ -83,6 +83,29 @@ function* writeFile(path: string, contents: string): Generator {
 }
 
 /**
+ * Clears the editor's file history from sessionStorage.
+ *
+ * The editor saves open file UUIDs to sessionStorage and restores them on
+ * reload. When loading a cloud project, the old UUIDs are invalid because
+ * we delete and recreate all files with new UUIDs.
+ */
+function clearEditorHistory(): void {
+    const keysToRemove: string[] = [];
+
+    for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+
+        if (key?.startsWith('editor.activeFileHistory.')) {
+            keysToRemove.push(key);
+        }
+    }
+
+    for (const key of keysToRemove) {
+        sessionStorage.removeItem(key);
+    }
+}
+
+/**
  * Replaces local storage with a project's files.
  *
  * Closes all open tabs, deletes all files, writes the new ones, then opens
@@ -91,6 +114,9 @@ function* writeFile(path: string, contents: string): Generator {
 function* handleCloudLoadFiles(action: ReturnType<typeof cloudLoadFiles>): Generator {
     try {
         const db = yield* getContext<FileStorageDb>('fileStorage');
+
+        // Clear stale file history that references old UUIDs
+        clearEditorHistory();
 
         // 1. Close all open files
         const openUuids = yield* select((s: RootState) => s.editor.openFileUuids);
