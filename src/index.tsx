@@ -81,6 +81,17 @@ window.addEventListener('drop', dragEventHandler);
 
 applyPreferences();
 
+// Clear stale editor file history before sagas start.
+// The editor saga restores files from sessionStorage, but cloud projects
+// recreate files with new UUIDs on load, so old history is invalid.
+for (let i = sessionStorage.length - 1; i >= 0; i--) {
+    const key = sessionStorage.key(i);
+
+    if (key?.startsWith('editor.activeFileHistory.')) {
+        sessionStorage.removeItem(key);
+    }
+}
+
 sagaMiddleware.run(rootSaga);
 
 const container = document.getElementById('root');
