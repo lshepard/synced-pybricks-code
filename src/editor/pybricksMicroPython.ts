@@ -362,12 +362,19 @@ const templateSnippets: Array<
     {
         label: 'primehub',
         documentation: 'Template for SPIKE Prime program.',
-        insertText: createTemplate('PrimeHub', [
-            'Motor',
-            'ColorSensor',
-            'UltrasonicSensor',
-            'ForceSensor',
-        ]),
+        insertText:
+            createTemplate('PrimeHub', [
+                'Motor',
+                'ColorSensor',
+                'UltrasonicSensor',
+                'ForceSensor',
+            ]) +
+            `left = Motor(Port.A)
+right = Motor(Port.B, Direction.COUNTERCLOCKWISE)
+bot = DriveBase(left, right, wheel_diameter=110, axle_track=56)
+
+bot.straight(50)
+`,
     },
     {
         label: 'essentialhub',
