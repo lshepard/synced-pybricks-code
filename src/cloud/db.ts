@@ -60,6 +60,9 @@ type ProjectRow = {
     created_at: Date;
     updated_at: Date;
     archived: boolean;
+    // only selected by getProjects; absent elsewhere, and null for a project
+    // that has never been saved to
+    last_editor?: string | null;
 };
 
 function toProject(row: ProjectRow): ProjectInfo {
@@ -69,6 +72,7 @@ function toProject(row: ProjectRow): ProjectInfo {
         createdAt: row.created_at.toISOString(),
         updatedAt: row.updated_at.toISOString(),
         archived: row.archived,
+        ...(row.last_editor ? { lastEditor: row.last_editor } : {}),
     };
 }
 
@@ -100,10 +104,22 @@ function toVersion(row: VersionRow): VersionInfo {
  * @returns Every project.
  */
 export async function getProjects(sql: Sql): Promise<ProjectInfo[]> {
+    // The lateral join reads only the newest version per project, which the
+    // feed index already orders, so the list costs one round trip rather than
+    // one per project. It is a left join because a project with no versions
+    // yet still belongs in the list.
     const rows = (await sql`
-        select slug, name, created_at, updated_at, archived
-        from project
-        order by updated_at desc
+        select p.slug, p.name, p.created_at, p.updated_at, p.archived,
+               v.author as last_editor
+        from project p
+        left join lateral (
+            select author
+            from project_version
+            where project_id = p.id
+            order by saved_at desc, id desc
+            limit 1
+        ) v on true
+        order by p.updated_at desc
     `) as ProjectRow[];
 
     return rows.map(toProject);

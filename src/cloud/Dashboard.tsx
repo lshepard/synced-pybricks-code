@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import CloudHeader from './CloudHeader';
 import NameGate from './NameGate';
 import * as api from './api';
-import { clearName, getName } from './identity';
+import { clearName, getEditedHere, getName } from './identity';
 import { ProjectInfo, maxProjectNameLength } from './protocol';
 
 function when(iso: string): string {
@@ -38,6 +38,52 @@ function when(iso: string): string {
     }
 
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/**
+ * Names whoever last saved a project, from the reader's point of view.
+ *
+ * @param project The project.
+ * @param who The reader's own name, if they have given one.
+ * @returns The name to show, or undefined for a project never saved to.
+ */
+function editor(project: ProjectInfo, who: string | undefined): string | undefined {
+    if (project.lastEditor === undefined) {
+        return undefined;
+    }
+
+    return project.lastEditor === who ? 'you' : project.lastEditor;
+}
+
+/**
+ * Splits projects into the ones touched on this machine and the rest.
+ *
+ * Membership is local, so it survives a rename and does not merge two people
+ * who share a name on one computer. Matching the reader's name is kept as a
+ * fallback, so work saved before this browser started keeping the list is not
+ * stranded at the bottom of the page.
+ *
+ * @param projects The projects to split, already in newest-first order.
+ * @param who The reader's own name, if they have given one.
+ * @returns The reader's projects and everyone else's, each newest first.
+ */
+function partition(
+    projects: readonly ProjectInfo[],
+    who: string | undefined,
+): { mine: ProjectInfo[]; theirs: ProjectInfo[] } {
+    const edited = new Set(getEditedHere());
+    const mine: ProjectInfo[] = [];
+    const theirs: ProjectInfo[] = [];
+
+    for (const project of projects) {
+        const isMine =
+            edited.has(project.slug) ||
+            (who !== undefined && project.lastEditor === who);
+
+        (isMine ? mine : theirs).push(project);
+    }
+
+    return { mine, theirs };
 }
 
 /** The project list, and the way in to everything else. */
@@ -117,6 +163,38 @@ const Dashboard: React.FunctionComponent = () => {
 
     const visible = (projects ?? []).filter((p) => p.archived === showArchived);
     const archivedCount = (projects ?? []).filter((p) => p.archived).length;
+    // Archived projects are a single flat list: they are the things explicitly
+    // put away, so splitting them by who touched them last is noise.
+    const { mine, theirs } = showArchived
+        ? { mine: [], theirs: visible }
+        : partition(visible, who);
+
+    const row = (project: ProjectInfo) => (
+        <li
+            key={project.slug}
+            className={`pb-cloud-row${
+                project.archived ? ' pb-cloud-row-archived' : ''
+            }`}
+            onClick={() => navigate(`/project/${project.slug}`)}
+        >
+            <span className="pb-cloud-row-name">{project.name}</span>
+            <span className="pb-cloud-row-editor">
+                {editor(project, who) ?? 'not saved yet'}
+            </span>
+            <span className="pb-cloud-row-when">{when(project.updatedAt)}</span>
+            <span className="pb-cloud-row-actions">
+                <Button
+                    small
+                    minimal
+                    text={project.archived ? 'Unarchive' : 'Archive'}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        toggleArchived(project);
+                    }}
+                />
+            </span>
+        </li>
+    );
 
     return (
         <>
@@ -160,43 +238,31 @@ const Dashboard: React.FunctionComponent = () => {
                             )}
                         </div>
                     ) : (
-                        <div className="pb-cloud-grid">
-                            {visible.map((project) => (
-                                <div
-                                    key={project.slug}
-                                    className={`pb-cloud-card${
-                                        project.archived
-                                            ? ' pb-cloud-card-archived'
-                                            : ''
-                                    }`}
-                                    onClick={() => navigate(`/project/${project.slug}`)}
-                                >
-                                    <h3>{project.name}</h3>
-                                    <div className="pb-cloud-card-meta">
-                                        edited {when(project.updatedAt)}
-                                    </div>
-                                    <div className="pb-cloud-card-actions">
-                                        <Button
-                                            small
-                                            minimal
-                                            text={
-                                                project.archived
-                                                    ? 'Unarchive'
-                                                    : 'Archive'
-                                            }
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleArchived(project);
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <>
+                            {mine.length > 0 && (
+                                <section className="pb-cloud-section">
+                                    <h2 className="pb-cloud-section-title">
+                                        Edited on this computer
+                                    </h2>
+                                    <ul className="pb-cloud-list">{mine.map(row)}</ul>
+                                </section>
+                            )}
+
+                            {theirs.length > 0 && (
+                                <section className="pb-cloud-section">
+                                    {mine.length > 0 && (
+                                        <h2 className="pb-cloud-section-title">
+                                            Everything else
+                                        </h2>
+                                    )}
+                                    <ul className="pb-cloud-list">{theirs.map(row)}</ul>
+                                </section>
+                            )}
+                        </>
                     )}
 
                     {(archivedCount > 0 || showArchived) && (
-                        <div style={{ marginTop: 28, textAlign: 'center' }}>
+                        <div className="pb-cloud-archived-toggle">
                             <Button
                                 minimal
                                 small

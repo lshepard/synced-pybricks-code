@@ -12,7 +12,7 @@ import {
 } from '@blueprintjs/core';
 import React, { useCallback, useState } from 'react';
 import * as api from './api';
-import { getName, getSessionId } from './identity';
+import { addEditedHere, getName, getSessionId } from './identity';
 import { VersionInfo, maxNoteLength } from './protocol';
 import { useReadProjectFiles } from './useProjectFiles';
 
@@ -62,6 +62,7 @@ const SaveButton: React.FunctionComponent<SaveButtonProps> = ({
                 sessionId: getSessionId(),
             });
 
+            addEditedHere(slug);
             setBusy(false);
             setAsking(false);
             setNote('');

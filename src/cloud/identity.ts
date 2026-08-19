@@ -11,6 +11,15 @@ const nameKey = 'cloud.name';
 const sessionKey = 'cloud.sessionId';
 const projectKey = 'cloud.project';
 const versionKey = 'cloud.version';
+const editedKey = 'cloud.edited';
+
+/**
+ * How many edited slugs are remembered.
+ *
+ * Enough to cover everything a person is actually working on, bounded so the
+ * key cannot grow without limit on a browser that is never cleared.
+ */
+const maxEdited = 50;
 
 /**
  * Reads the stored display name.
@@ -109,4 +118,45 @@ export function getLocalVersion(slug: string): number | undefined {
     const stored = Number(localStorage.getItem(versionKey));
 
     return Number.isFinite(stored) && stored > 0 ? stored : undefined;
+}
+
+/**
+ * Reads the projects that have been edited in this browser, most recent first.
+ *
+ * This is what makes "edited here" mean this machine rather than this name.
+ * There are no accounts, so the server cannot tell two people apart when they
+ * type the same name, and a person who renames themselves would otherwise lose
+ * track of their own work. Neither problem reaches this list, because it is
+ * written locally at the moment of the save.
+ *
+ * @returns The slugs, newest first. Unparseable storage reads as empty, since
+ * a lost list only costs the ordering of a dashboard section.
+ */
+export function getEditedHere(): string[] {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(editedKey) ?? '[]');
+
+        return Array.isArray(parsed)
+            ? parsed.filter((s): s is string => typeof s === 'string')
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Records that a project was edited in this browser.
+ *
+ * Moves an already-known project back to the front, so the list stays in
+ * most-recent-first order.
+ *
+ * @param slug The project that was saved to.
+ */
+export function addEditedHere(slug: string): void {
+    const next = [slug, ...getEditedHere().filter((s) => s !== slug)].slice(
+        0,
+        maxEdited,
+    );
+
+    localStorage.setItem(editedKey, JSON.stringify(next));
 }

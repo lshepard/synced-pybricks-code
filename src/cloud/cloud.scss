@@ -213,50 +213,127 @@ $header-height: 40px;
     }
 }
 
-.pb-cloud-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-    gap: 14px;
+// The list is denser than cards were, so that coming back to a long-running
+// season of projects is a matter of scanning one column of names rather than
+// hunting across a grid.
+.pb-cloud-section + .pb-cloud-section {
+    margin-top: 26px;
 }
 
-.pb-cloud-card {
+.pb-cloud-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #64748b;
+    margin: 0 0 8px;
+}
+
+.pb-cloud-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     background: white;
     border: 1px solid #e2e8f0;
-    border-left: 4px solid $electric;
     border-radius: 8px;
-    padding: 14px 16px;
-    cursor: pointer;
-    transition:
-        transform 0.15s ease,
-        box-shadow 0.15s ease;
+    overflow: hidden;
+}
 
-    &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 20px -12px rgb(0 0 0 / 35%);
+.pb-cloud-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 10px 7px 14px;
+    cursor: pointer;
+    border-left: 4px solid $electric;
+
+    & + & {
+        border-top: 1px solid #eef2f6;
     }
 
-    &.pb-cloud-card-archived {
+    &:hover {
+        background: #eef6fb;
+    }
+
+    &.pb-cloud-row-archived {
         border-left-color: #94a3b8;
         opacity: 0.7;
     }
+}
 
-    h3 {
-        margin: 0 0 6px;
-        font-size: 16px;
-        font-weight: 600;
-        word-break: break-word;
+.pb-cloud-row-name {
+    flex: 1 1 auto;
+    font-size: 15px;
+    font-weight: 600;
+    // long names wrap rather than pushing the columns off the row
+    min-width: 0;
+    word-break: break-word;
+}
+
+.pb-cloud-row-editor {
+    font-size: 13px;
+    color: #334155;
+    white-space: nowrap;
+}
+
+.pb-cloud-row-when {
+    font-size: 12px;
+    color: #94a3b8;
+    white-space: nowrap;
+    // holds the column steady as the wording varies from "2:14 PM" to
+    // "yesterday", so the names above it stay aligned
+    flex: 0 0 auto;
+    min-width: 82px;
+    text-align: right;
+}
+
+.pb-cloud-row-actions {
+    flex: 0 0 auto;
+    // Blueprint's minimal button takes its color from the surrounding theme,
+    // which reads as white here; state it against the light row instead.
+    .bp5-button.bp5-minimal {
+        color: #475569;
+
+        &:hover {
+            color: #0f172a;
+            background: #dbeafe;
+        }
     }
 }
 
-.pb-cloud-card-meta {
-    font-size: 12px;
-    color: #64748b;
+// On a phone the metadata drops under the name rather than competing with it
+// for the same row.
+@media (width <= 560px) {
+    .pb-cloud-row {
+        flex-wrap: wrap;
+        gap: 4px 12px;
+    }
+
+    .pb-cloud-row-name {
+        flex: 1 0 100%;
+    }
+
+    .pb-cloud-row-when {
+        text-align: left;
+        min-width: 0;
+    }
 }
 
-.pb-cloud-card-actions {
-    margin-top: 10px;
-    display: flex;
-    gap: 8px;
+// The way in and out of the archived list. Blueprint's minimal button is
+// near-white against this page, so it states its color the same way the row
+// actions do.
+.pb-cloud-archived-toggle {
+    margin-top: 24px;
+    text-align: center;
+
+    .bp5-button.bp5-minimal {
+        color: #475569;
+
+        &:hover {
+            color: #0f172a;
+            background: #e2e8f0;
+        }
+    }
 }
 
 .pb-cloud-empty {

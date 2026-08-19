@@ -11,6 +11,7 @@ import NameGate from './NameGate';
 import SaveButton from './SaveButton';
 import * as api from './api';
 import {
+    addEditedHere,
     clearName,
     getCurrentProject,
     getLocalVersion,
@@ -411,6 +412,7 @@ const ProjectPage: React.FunctionComponent = () => {
                                             // nothing is lost by loading over
                                             // them
                                             setLocalVersion(pending, saved.id);
+                                            addEditedHere(pending);
                                             setSavingPending(false);
                                             await proceedWithLoad();
                                         } catch (err) {

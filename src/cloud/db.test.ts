@@ -119,6 +119,35 @@ describeDb('database', () => {
         });
     });
 
+    describe('getProjects', () => {
+        it('should name whoever saved last', async () => {
+            const project = await newProject('LastEditor');
+            await addVersion(sql, project.slug, {
+                files,
+                author: 'Ada',
+                sessionId: session,
+            });
+            await addVersion(sql, project.slug, {
+                files,
+                author: 'Grace',
+                sessionId: session,
+            });
+
+            const found = (await getProjects(sql)).find((p) => p.slug === project.slug);
+
+            expect(found?.lastEditor).toBe('Grace');
+        });
+
+        it('should leave the editor unset before the first save', async () => {
+            const project = await newProject('NeverSaved');
+
+            const found = (await getProjects(sql)).find((p) => p.slug === project.slug);
+
+            expect(found).toBeDefined();
+            expect(found?.lastEditor).toBeUndefined();
+        });
+    });
+
     describe('setArchived', () => {
         it('should set and clear the flag', async () => {
             const project = await newProject('Arch');

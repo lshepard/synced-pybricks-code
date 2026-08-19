@@ -31,6 +31,11 @@ export type ProjectInfo = Readonly<{
     updatedAt: string;
     /** Archived projects are hidden from the main list but never deleted. */
     archived: boolean;
+    /**
+     * The name of whoever saved the most recent version, or undefined if the
+     * project has never been saved to.
+     */
+    lastEditor?: string;
 }>;
 
 /** An entry in a project's version feed. */

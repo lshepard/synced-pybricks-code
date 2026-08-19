@@ -25,7 +25,8 @@ function toProject(row) {
     name: row.name,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
-    archived: row.archived
+    archived: row.archived,
+    ...row.last_editor ? { lastEditor: row.last_editor } : {}
   };
 }
 async function setArchived(sql, slug, archived) {

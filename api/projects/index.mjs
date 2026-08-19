@@ -28,14 +28,23 @@ function toProject(row) {
     name: row.name,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
-    archived: row.archived
+    archived: row.archived,
+    ...row.last_editor ? { lastEditor: row.last_editor } : {}
   };
 }
 async function getProjects(sql) {
   const rows = await sql`
-        select slug, name, created_at, updated_at, archived
-        from project
-        order by updated_at desc
+        select p.slug, p.name, p.created_at, p.updated_at, p.archived,
+               v.author as last_editor
+        from project p
+        left join lateral (
+            select author
+            from project_version
+            where project_id = p.id
+            order by saved_at desc, id desc
+            limit 1
+        ) v on true
+        order by p.updated_at desc
     `;
   return rows.map(toProject);
 }
