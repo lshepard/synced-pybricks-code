@@ -1,10 +1,13 @@
 // src/cloud/db.ts
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 
 // src/cloud/protocol.ts
 var lockTtlMs = 20 * 60 * 1e3;
 
 // src/cloud/db.ts
+var localHosts = ["localhost", "127.0.0.1"];
+var localProxyPort = 4444;
+neonConfig.fetchEndpoint = (host, port) => localHosts.includes(host) ? `http://${host}:${localProxyPort}/sql` : `https://${host}:${port}/sql`;
 var CloudError = class extends Error {
   constructor(name, message, detail) {
     super(message);

@@ -61,7 +61,47 @@ anything they import, run `yarn build:api` and commit the result.
 Route files map to URLs, so `versions.ts` and `versions/[id].ts` are separate
 files: a single-segment `[id]` does not also match the collection path.
 
-## Setting up a database
+## A database on your machine
+
+For development and for the tests, rather than a Neon branch:
+
+```
+docker compose up -d
+```
+
+That is Postgres with `schema.sql` already applied, plus a proxy on port 4444
+that speaks Neon's HTTP protocol in front of it. The driver expects an HTTPS
+endpoint derived from the connection string's host, which a local Postgres
+does not have, so `db.ts` points `localhost` and `127.0.0.1` at the proxy
+instead. Nothing else changes: the same driver and the same queries run
+against both.
+
+The connection string is:
+
+```
+postgres://postgres:postgres@localhost:5432/main
+```
+
+The schema is applied when the volume is first created, so after editing
+`schema.sql` either re-apply it by hand or run `docker compose down -v` to
+start over.
+
+## Running the API on your machine
+
+`yarn start` serves the editor but not `/api`: those are Vercel functions. To
+run both, and so to run the browser tests without a deployment:
+
+```
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/main vercel dev --listen 3000
+```
+
+It runs `yarn start` behind it, per `devCommand` in `vercel.json`, because
+Vercel otherwise guesses `react-scripts start`, which this project does not
+have. The functions inherit the environment of the command, and that is the
+way to give them a connection string: an `.env.local` in the repository, or
+what `vercel pull` writes to `.vercel/`, does not reach them.
+
+## Setting up the deployed database
 
 Neon, through the Vercel integration, which injects the connection strings
 into the project.
@@ -97,12 +137,15 @@ To run them, point `TEST_DATABASE_URL` at a database **other than the one the
 app uses**. They create and delete rows. A Neon project has one database on
 its default branch, which is why they do not fall back to `DATABASE_URL`.
 
-Create a branch in the Neon console, apply `schema.sql` to it, and put its
-pooled connection string in `.env.test.local`:
+The local database above is the easy answer. Put it in `.env.test.local`,
+which is gitignored:
 
 ```
-TEST_DATABASE_URL=postgresql://...
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/main
 ```
+
+A Neon branch works too: create one in the console, apply `schema.sql` to it,
+and use its pooled connection string instead.
 
 Then:
 

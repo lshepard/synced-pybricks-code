@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Luke Shepard
+
+# Postgres for local development and the database tests, with the proxy that
+# makes it answer Neon's HTTP driver. See src/cloud/README.md.
+
+services:
+    db:
+        image: postgres:16-alpine
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: main
+        ports:
+            - '5432:5432'
+        volumes:
+            # applied once, when the data directory is first created
+            - ./src/cloud/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+            - pgdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U postgres -d main']
+            interval: 2s
+            timeout: 3s
+            retries: 15
+
+    # Speaks Neon's HTTP protocol in front of plain Postgres, so the same
+    # driver the serverless functions use works against a local database.
+    neon-proxy:
+        image: ghcr.io/timowilhelm/local-neon-http-proxy:main
+        environment:
+            PG_CONNECTION_STRING: postgres://postgres:postgres@db:5432/main
+        ports:
+            - '4444:4444'
+        depends_on:
+            db:
+                condition: service_healthy
+
+volumes:
+    pgdata:
